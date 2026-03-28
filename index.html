@@ -186,7 +186,7 @@ async function askAI(msg){
     const am=raw.match(/\[ASCII_ART\]([\s\S]*?)\[\/ASCII_ART\]/);
     if(am){
       const art=am[1];
-      log('<pre style="color:var(--ai-color);font-size:11px;line-height:1.2;font-family:monospace;white-space:pre;margin:10px 0;">'+escHtml(art)+'</pre>','inf');
+      log('<pre style="color:var(--ai-color);font-size:11px;line-height:1.2;font-family:monospace;white-space:pre;margin:10px 0;">'+esc(art)+'</pre>','inf');
     }
 
     // SAVE_FILE — upload to bucket under user's folder
@@ -211,7 +211,7 @@ async function askAI(msg){
           mkWin({title:'◈ '+fname,w:900,h:580,type:'game',content:data});
           log(`LAUNCHED: ${fname}`,'ok');
         } else {
-          log('<pre style="color:#aaa;font-size:11px;white-space:pre-wrap;margin:8px 0;">'+escHtml(data.slice(0,2000))+'</pre>','inf');
+          log('<pre style="color:#aaa;font-size:11px;white-space:pre-wrap;margin:8px 0;">'+esc(data.slice(0,2000))+'</pre>','inf');
         }
       } else {
         // Try local cache
@@ -370,7 +370,7 @@ async function exec(raw){
         mkWin({title:'◈ '+fname,w:900,h:580,type:'game',content:data});
         log(`LAUNCHED: ${fname}`,'ok');
       } else {
-        log('<pre style="color:#aaa;font-size:11px;white-space:pre-wrap;margin:8px 0;max-height:300px;overflow:auto;">'+escHtml(data.slice(0,3000))+'</pre>','inf');
+        log('<pre style="color:#aaa;font-size:11px;white-space:pre-wrap;margin:8px 0;max-height:300px;overflow:auto;">'+esc(data.slice(0,3000))+'</pre>','inf');
       }
     } else {
       log(`NOT_FOUND: ${fname} — not in cloud or local cache`,'err');
@@ -385,8 +385,8 @@ async function exec(raw){
     const localKeys=Object.keys(localStorage).filter(k=>k.startsWith('dc3_save_'+S.user.toLowerCase()+'_')).map(k=>k.replace('dc3_save_'+S.user.toLowerCase()+'_',''));
     if(!files.length&&!localKeys.length){log('NO SAVED FILES.','sys');return;}
     let html='<table class="lt"><tr><th>FILE</th><th>SIZE</th><th>LOCATION</th></tr>';
-    const cloudNames=files.map(f=>{const sz=f.metadata?.size?Math.round(f.metadata.size/1024)+'KB':'?';html+=`<tr><td>${escHtml(f.name)}</td><td>${sz}</td><td style="color:#00ff88">☁ cloud</td></tr>`;return f.name;});
-    localKeys.filter(k=>!cloudNames.includes(k)).forEach(k=>html+=`<tr><td>${escHtml(k)}</td><td>—</td><td style="color:#ffaa00">◉ local</td></tr>`);
+    const cloudNames=files.map(f=>{const sz=f.metadata?.size?Math.round(f.metadata.size/1024)+'KB':'?';html+=`<tr><td>${esc(f.name)}</td><td>${sz}</td><td style="color:#00ff88">☁ cloud</td></tr>`;return f.name;});
+    localKeys.filter(k=>!cloudNames.includes(k)).forEach(k=>html+=`<tr><td>${esc(k)}</td><td>—</td><td style="color:#ffaa00">◉ local</td></tr>`);
     html+='</table>';
     log(html,'inf');
     return;
