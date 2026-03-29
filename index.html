@@ -103,12 +103,41 @@ async function sbWrite(path,body){
   }catch{return false;}
 }
 function canon(p){return{accent:p.accent??'#3b82f6',aiColor:p.aiColor??'#FF5F1F',logoColor:p.logoColor??'#e0e0e0',bgColor:p.bgColor??'#0a0a0a',textColor:p.textColor??'#e0e0e0',isRoot:p.isRoot===true,encrypted:p.encrypted===true,passwordHash:p.passwordHash??null,createdAt:p.createdAt??new Date().toISOString(),updatedAt:new Date().toISOString()};}
+// sbDelete
+async function sbDelete(path){
+  try{
+    const ctrl=new AbortController();setTimeout(()=>ctrl.abort(),5000);
+    const r=await fetch(`${SB_URL}/storage/v1/object/${BUCKET}/${path}`,{
+      method:'DELETE',headers:{apikey:SB_KEY,Authorization:`Bearer ${SB_KEY}`},signal:ctrl.signal
+    });
+    return r.ok;
+  }catch{return false;}
+}
+
 // Aliases so old names work too
 const sbGet=sbFetch;
 const sbPut=sbWrite;
 
+// publishToLibrary
+async function publishToLibrary(name, body){
+  // filename format: author__entryname  so we know who published it
+  const author=(S.user||'guest').toLowerCase();
+  const safeName=name.replace(/[^a-zA-Z0-9._-]/g,'_').toLowerCase();
+  const libName=`${author}__${safeName}`;
+  const path=`library/${libName}`;
+  log(`PUBLISHING TO LIBRARY: ${libName}...`,'sys');
+  const ok=await sbWrite(path, body);
+  if(ok){
+    log(`<span style="color:var(--ok)">PUBLISHED: <strong>${esc(libName)}</strong> is now in The Library.</span><br><span class="inf">Anyone can access it with: --library run ${esc(libName)}</span>`,'ok');
+  } else {
+    // fallback: store locally with library prefix
+    try{localStorage.setItem('dc3_lib_'+libName, body);}catch{}
+    log(`PUBLISH FAILED — saved locally. Cloud may be offline.`,'err');
+  }
+}
+
 async function loadUser(name){const k=name.toLowerCase();const raw=await sbFetch(`users/${k}.json`);if(raw){try{const p=JSON.parse(raw);MEM[k]=p;await idbSet(k,p);lsSet(k,p);return p;}catch{}}const iv=await idbGet(k);if(iv){MEM[k]=iv;return iv;}const lv=lsGet(k);if(lv){MEM[k]=lv;return lv;}return MEM[k]??null;}
-async function saveUser(name,profile){const k=name.toLowerCase();const p=canon(profile);const body=JSON.stringify(p,null,2);MEM[k]=p;lsSet(k,p);await idbSet(k,p);const cloud=await sbWrite(`users/${k}.json`,body);if(cloud)log('SYNC: ☁ supabase + local','sys');else if(_idbOk)log('SYNC: ◉ local (IDB) — supabase offline','sys');else log('SYNC: ◈ session memory only','sys');return p;}
+async function saveUser(name,profile){const k=name.toLowerCase();const p=canon(profile);const body=JSON.stringify(p,null,2);MEM[k]=p;lsSet(k,p);await idbSet(k,p);sbWrite(`users/${k}.json`,body);return p;} // silent save
 async function createUser(name){const ex=await loadUser(name);if(ex)return ex;const p=defP();p.createdAt=new Date().toISOString();return saveUser(name,p);}
 
 /* ALIASES */
@@ -126,7 +155,7 @@ async function saveAliases(username){
   const k='aliases_'+username.toLowerCase();
   const body=JSON.stringify(S.aliases,null,2);
   lsSet(k,S.aliases);await idbSet(k,S.aliases);
-  await sbWrite(`aliases/${username.toLowerCase()}.json`,body);
+  sbWrite(`aliases/${username.toLowerCase()}.json`,body); // fire-and-forget
 }
 
 /* NATURAL LANGUAGE → COMMAND MAP */
@@ -140,6 +169,9 @@ const NL_MAP=[
   // files
   {pat:/^(show|list|what('s|\s+are)\s+(my\s+)?)?(my\s+)?(files|saves|saved files|disk)/i, fn:_=>'--saves'},
   // logout
+  {pat:/^(browse|open|show|view)\s+(the\s+)?library/i,          fn:_=>'--library'},
+  {pat:/^publish\s+(.+)/i,                                        fn:i=>{const m=i.match(/publish\s+(\S+)/i);return m?'--pub =library '+m[1]:'--pub =library';}},
+  {pat:/^(run|launch|play|open|start|load)\s+(\S+)/i, fn:i=>{const m=i.match(/(?:run|launch|play|open|start|load)\s+(\S+)/i);return m?'--load '+m[1]:i;}},
   {pat:/^(log\s*out|sign\s*out|exit|quit|bye|goodbye|end session)/i,   fn:_=>'--end'},
   // close window
   {pat:/^(close|shut|hide)\s+(window|that|it|last)/i,                  fn:_=>'--endx'},
@@ -289,8 +321,9 @@ async function askAI(msg){
       const data=await sbGet(path);
       if(data){
         // If it's an HTML game, launch it
-        if(fname.endsWith('.html')||fname.endsWith('.game')){
-          mkWin({title:'◈ '+fname,w:900,h:580,type:'game',content:data});
+        const isHtml2=fname.endsWith('.html')||fname.endsWith('.game')||data.trimStart().startsWith('<!DOCTYPE')||data.trimStart().startsWith('<html');
+        if(isHtml2){
+          mkWin({title:'◈ '+fname,w:940,h:600,type:'game',content:data});
           log(`LAUNCHED: ${fname}`,'ok');
         } else {
           log('<pre style="color:#aaa;font-size:11px;white-space:pre-wrap;margin:8px 0;">'+esc(data.slice(0,2000))+'</pre>','inf');
@@ -316,7 +349,7 @@ async function askAI(msg){
       .trim();
     if(disp) log(disp,'ai');
 
-    if(S.user) await saveUser(S.user,S.profile);
+    if(S.user) saveUser(S.user,S.profile); // fire-and-forget, no sync log spam
 
   }catch(e){
     document.getElementById(lid)?.remove();
@@ -355,6 +388,13 @@ async function finishLogin(name,profile){
 async function handleMode(val){
   const mode=S.inputMode;S.inputMode=null;$ci.type='text';
   if(mode==='login_pass'){const{name,profile}=S.inputCtx;const h=await hash(val);if(h===profile.passwordHash)finishLogin(name,profile);else log('AUTH_FAILURE: INCORRECT PASSWORD.','err');return;}
+  if(mode==='pub_name'){
+    const name=val.trim().replace(/\s+/g,'_').replace(/[^a-zA-Z0-9._-]/g,'_');
+    if(!name){log('INVALID NAME. Try again with --pub =library','err');return;}
+    await publishToLibrary(name, S.inputCtx.body);
+    return;
+  }
+
   if(mode==='enc_set'){if(val.length<3){log('PASSWORD TOO SHORT (min 3).','err');return;}const h=await hash(val);S.profile.encrypted=true;S.profile.passwordHash=h;await saveUser(S.user,S.profile);if(MEM[S.user.toLowerCase()]?.passwordHash===h)log('ENCRYPTION SET. Account is now password-protected.','ok');else log('ENCRYPTION_WARN: unexpected mismatch.','err');return;}
   if(mode==='enc_verify'){const stored=MEM[S.user.toLowerCase()]||lsGet(S.user.toLowerCase());const h=await hash(val);if(!stored||h!==stored.passwordHash){log('AUTH_FAILURE.','err');return;}log('VERIFIED. Enter NEW PASSWORD (blank = remove):','sys');$ci.type='password';S.inputMode='enc_new';return;}
   if(mode==='enc_new'){if(!val){S.profile.encrypted=false;S.profile.passwordHash=null;await saveUser(S.user,S.profile);log('ENCRYPTION REMOVED.','ok');}else{if(val.length<3){log('PASSWORD TOO SHORT.','err');return;}const h=await hash(val);S.profile.encrypted=true;S.profile.passwordHash=h;await saveUser(S.user,S.profile);log('PASSWORD UPDATED.','ok');}return;}
@@ -405,7 +445,7 @@ async function exec(raw){
     return;
   }
 
-  if(!S.user&&cmd!=='--help'){log('NOT LOGGED IN. Use: --usr .(username)','err');return;}
+  if(!S.user&&cmd!=='--help'&&cmd!=='--library'){log('NOT LOGGED IN. Use: --usr .(username)','err');return;}
   if(cmd==='--help'){log(`<div class="hb">
 <div style="color:var(--accent);font-weight:900;margin-bottom:10px">── DREAMCORE v3.0 // COMMAND REFERENCE ──</div>
 <span class="hc">--usr .(username)</span><br><span class="hd">&nbsp;&nbsp;Sign in or create account</span><br><br>
@@ -430,6 +470,10 @@ async function exec(raw){
 <span class="hd">&nbsp;&nbsp;"open google.com" → --reach google.com</span><br>
 <span class="hd">&nbsp;&nbsp;"show my files" → --saves</span><br>
 <span class="hd">&nbsp;&nbsp;"log out" → --end</span><br><br>
+<span class="hc">--pub =library (filename)</span><br><span class="hd">&nbsp;&nbsp;Publish a file (or last AI output) to The Library — accessible by all users</span><br><br>
+<span class="hc">--library</span><br><span class="hd">&nbsp;&nbsp;Browse The Library — public collection of games, art, and tools</span><br><br>
+<span class="hc">--library run (name)</span><br><span class="hd">&nbsp;&nbsp;Launch an entry from The Library</span><br><br>
+<span class="hc">--library remove (name)</span><br><span class="hd">&nbsp;&nbsp;Remove your own entry from The Library</span><br><br>
 <span class="hc">(anything else)</span><br><span class="hd">&nbsp;&nbsp;Talk to the AI kernel — change colors, write code, ask questions, and more</span>
 </div>`,'inf');return;}
   if(cmd==='--reach'){const url=args.join(' ').trim();if(!url){log('USAGE: --reach (url)','err');return;}mkWin({title:'REACH: '+url,w:980,h:620,type:'iframe',content:url});log(`LAUNCHED: ${url}`,'ok');return;}
@@ -484,8 +528,10 @@ async function exec(raw){
       try{data=localStorage.getItem('dc3_save_'+S.user.toLowerCase()+'_'+fname);}catch{}
     }
     if(data){
-      if(fname.endsWith('.html')||fname.endsWith('.game')){
-        mkWin({title:'◈ '+fname,w:900,h:580,type:'game',content:data});
+      // Auto-detect HTML content regardless of filename/extension
+      const isHtml=fname.endsWith('.html')||fname.endsWith('.game')||data.trimStart().startsWith('<!DOCTYPE')||data.trimStart().startsWith('<html');
+      if(isHtml){
+        mkWin({title:'◈ '+fname,w:940,h:600,type:'game',content:data});
         log(`LAUNCHED: ${fname}`,'ok');
       } else {
         log('<pre style="color:#aaa;font-size:11px;white-space:pre-wrap;margin:8px 0;max-height:300px;overflow:auto;">'+esc(data.slice(0,3000))+'</pre>','inf');
@@ -507,6 +553,14 @@ async function exec(raw){
     localKeys.filter(k=>!cloudNames.includes(k)).forEach(k=>html+=`<tr><td>${esc(k)}</td><td>—</td><td style="color:#ffaa00">◉ local</td></tr>`);
     html+='</table>';
     log(html,'inf');
+    return;
+  }
+
+  // ── run (filename) ───────────────────────────
+  if(cmd==='run'){
+    const fname=args[0];
+    if(!fname){log('USAGE: run (filename)','err');return;}
+    await exec('--load '+fname);
     return;
   }
 
@@ -557,6 +611,114 @@ async function exec(raw){
     return;
   }
 
+  // ── --pub =library ────────────────────────────
+  if(cmd==='--pub'){
+    const dest=args[0]?.toLowerCase();
+    if(dest!=='=library'){log('USAGE: --pub =library (filename) — publish to The Library','err');return;}
+
+    const fname=args[1]||null;
+    let body=null, displayName=null;
+
+    if(fname){
+      // load from user's saves
+      const path=`saves/${S.user.toLowerCase()}/${fname}`;
+      log(`LOADING: ${fname}...`,'sys');
+      body=await sbGet(path);
+      if(!body) try{body=localStorage.getItem('dc3_save_'+S.user.toLowerCase()+'_'+fname);}catch{}
+      if(!body){log(`NOT_FOUND: ${fname} in your saves. Use --save (filename) first.`,'err');return;}
+      displayName=fname;
+    } else {
+      // use last AI output
+      const lastAI=S.history.filter(h=>h.role==='model').slice(-1)[0]?.parts?.[0]?.text||'';
+      if(!lastAI){log('NOTHING TO PUBLISH — no AI output yet. Run something first.','err');return;}
+      const gm=lastAI.match(/\[GAME_HTML\]([\s\S]*?)\[\/GAME_HTML\]/);
+      body=gm?gm[1].trim():lastAI;
+      displayName='untitled_'+Date.now();
+    }
+
+    // Ask for a library name if publishing last output
+    if(!fname){
+      log('ENTER A NAME FOR THE LIBRARY ENTRY (no spaces):','sys');
+      S.inputMode='pub_name';
+      S.inputCtx={body};
+      return;
+    }
+
+    await publishToLibrary(displayName, body);
+    return;
+  }
+
+  // ── --library ──────────────────────────────────
+  if(cmd==='--library'||input.trim()==='--TheLibrary'){
+    const sub=args[0]?.toLowerCase();
+
+    // --library list or just --library
+    if(!sub||sub==='list'||sub==='ls'){
+      log('SCANNING THE LIBRARY...','sys');
+      const files=await sbList('library/');
+      if(!files||!files.length){log('THE LIBRARY IS EMPTY. Be the first — use --pub =library','sys');return;}
+      let h=`<div class="hb"><div style="color:var(--accent);font-weight:900;margin-bottom:8px">── ◈ THE LIBRARY ── PUBLIC COLLECTION ──</div>`;
+      files.filter(f=>f.name&&f.name!=='.keep').forEach(f=>{
+        const meta=f.metadata||{};
+        const sz=meta.size?Math.round(meta.size/1024)+'KB':'?';
+        const upd=f.updated_at?f.updated_at.slice(0,10):'?';
+        // parse author from filename: author__title
+        const parts=f.name.split('__');
+        const author=parts.length>1?parts[0]:'unknown';
+        const title=parts.length>1?parts.slice(1).join('__'):f.name;
+        h+=`<div style="margin:6px 0;display:flex;align-items:center;gap:10px;">
+          <span style="color:var(--accent);font-weight:900;min-width:180px">${esc(title)}</span>
+          <span style="color:#555;font-size:11px">by ${esc(author)}</span>
+          <span style="color:#333;font-size:10px">${sz} · ${upd}</span>
+          <span style="color:#00ff88;cursor:pointer;font-size:11px" onclick="exec('--library run ${esc(f.name)}')">▶ RUN</span>
+        </div>`;
+      });
+      h+='</div>';
+      log(h,'inf');
+      return;
+    }
+
+    // --library run (entry)
+    if(sub==='run'||sub==='play'||sub==='launch'||sub==='open'){
+      const entry=args.slice(1).join(' ').trim();
+      if(!entry){log('USAGE: --library run (entry name)','err');return;}
+      log(`FETCHING FROM LIBRARY: ${entry}...`,'sys');
+      // try exact match first, then search
+      let data=await sbGet(`library/${entry}`);
+      if(!data){
+        // fuzzy: list and find closest
+        const files=await sbList('library/');
+        const match=files.find(f=>f.name.toLowerCase().includes(entry.toLowerCase()));
+        if(match) data=await sbGet(`library/${match.name}`);
+      }
+      if(!data){log(`NOT FOUND IN LIBRARY: ${entry}`,'err');return;}
+      const isHtml=data.trimStart().startsWith('<!DOCTYPE')||data.trimStart().startsWith('<html');
+      if(isHtml){
+        mkWin({title:'◈ LIBRARY: '+entry,w:960,h:620,type:'game',content:data});
+        log(`LAUNCHED FROM LIBRARY: ${entry}`,'ok');
+      } else {
+        log('<pre style="color:#aaa;font-size:11px;white-space:pre-wrap;margin:8px 0;max-height:300px;overflow:auto;">'+esc(data.slice(0,3000))+'</pre>','inf');
+      }
+      return;
+    }
+
+    // --library remove (entry) — only author or root can remove
+    if(sub==='remove'||sub==='rm'||sub==='delete'){
+      const entry=args.slice(1).join(' ').trim();
+      if(!entry){log('USAGE: --library remove (entry name)','err');return;}
+      const author=entry.split('__')[0];
+      if(author!==S.user.toLowerCase()&&!S.profile.isRoot){
+        log('PERMISSION DENIED — you can only remove your own library entries.','err');return;
+      }
+      const ok=await sbDelete(`library/${entry}`);
+      log(ok?`REMOVED FROM LIBRARY: ${entry}`:`REMOVE FAILED: ${entry}`,'ok');
+      return;
+    }
+
+    log('USAGE: --library | --library run (name) | --library remove (name)','err');
+    return;
+  }
+
   await askAI(input);
 }
 
@@ -566,7 +728,7 @@ $ci.addEventListener('keydown',async e=>{
   if(e.key==='ArrowUp'){e.preventDefault();if(S.cmdIdx<S.cmdHist.length-1)$ci.value=S.cmdHist[++S.cmdIdx]||'';}
   if(e.key==='ArrowDown'){e.preventDefault();S.cmdIdx>0?$ci.value=S.cmdHist[--S.cmdIdx]:($ci.value='',S.cmdIdx=-1);}
   if(e.key==='Tab'){e.preventDefault();const userAliases=Object.keys(S.aliases||{});
-    const C=['--help','--reach ','--end','--endx','--list','.disk -list','--encrypt -usr','--encrypt -usr -reset','--usr .','make game ','make ascii ','--alias set ','--alias list','--alias remove ','--saves','--save ','--load ',...userAliases];const m=C.find(c=>c.startsWith($ci.value)&&c!==$ci.value);if(m)$ci.value=m;}
+    const C=['--help','--reach ','--end','--endx','--list','.disk -list','--encrypt -usr','--encrypt -usr -reset','--usr .','make game ','make ascii ','--alias set ','--alias list','--alias remove ','--saves','--save ','--load ','--pub =library ','--library','--library run ','--library remove ',...userAliases];const m=C.find(c=>c.startsWith($ci.value)&&c!==$ci.value);if(m)$ci.value=m;}
 });
 document.addEventListener('click',e=>{if(!e.target.closest('.win')&&!e.target.classList.contains('wb'))$ci.focus();});
 
