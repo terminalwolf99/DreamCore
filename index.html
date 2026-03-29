@@ -67,7 +67,7 @@ html,body{background:var(--bg);color:var(--text);font-family:var(--font);height:
 const SB_URL='https://wiubdgtfriostbolyjzw.supabase.co';
 const SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndpdWJkZ3Rmcmlvc3Rib2x5anp3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI0NjQ2MDAsImV4cCI6MjA4ODA0MDYwMH0.R9C_-V2KPeVRpPLOcqulDP3FJc79Rb7IMweAo3miDCU';
 const BUCKET='brain.exe';
-const S={user:null,profile:defP(),history:[],cmdHist:[],cmdIdx:-1,wins:[],winZ:600,inputMode:null,inputCtx:{}};
+const S={user:null,profile:defP(),history:[],cmdHist:[],cmdIdx:-1,wins:[],winZ:600,inputMode:null,inputCtx:{},aliases:{}};
 function defP(){return{accent:'#3b82f6',aiColor:'#FF5F1F',logoColor:'#e0e0e0',bgColor:'#0a0a0a',textColor:'#e0e0e0',isRoot:false,encrypted:false,passwordHash:null,createdAt:null};}
 const $out=document.getElementById('out'),$ci=document.getElementById('ci'),$pr=document.getElementById('pr'),$boot=document.getElementById('boot'),$bar=document.getElementById('boot-bar'),$msg=document.getElementById('boot-msg'),$wm=document.getElementById('wm');
 
@@ -78,12 +78,81 @@ async function idbGet(k){if(!_idbOk)return null;return new Promise(res=>{try{con
 async function idbSet(k,v){if(!_idbOk)return;return new Promise(res=>{try{const r=_idb.transaction('u','readwrite').objectStore('u').put({k,v});r.onsuccess=()=>res(true);r.onerror=()=>res(false);}catch{res(false);}});}
 function lsGet(k){try{const r=localStorage.getItem('dc3_'+k);return r?JSON.parse(r):null;}catch{return null;}}
 function lsSet(k,v){try{localStorage.setItem('dc3_'+k,JSON.stringify(v));}catch{}}
-async function sbFetch(path){try{const r=await fetch(`${SB_URL}/storage/v1/object/${BUCKET}/${path}`,{headers:{apikey:SB_KEY,Authorization:`Bearer ${SB_KEY}`}});return r.ok?await r.text():null;}catch{return null;}}
-async function sbWrite(path,body){try{const r=await fetch(`${SB_URL}/storage/v1/object/${BUCKET}/${path}`,{method:'POST',headers:{apikey:SB_KEY,Authorization:`Bearer ${SB_KEY}`,'Content-Type':'application/json','x-upsert':'true'},body});return r.ok||r.status===200||r.status===201;}catch{return false;}}
+async function sbFetch(path){
+  try{
+    const ctrl=new AbortController();
+    const timer=setTimeout(()=>ctrl.abort(),5000);
+    const r=await fetch(`${SB_URL}/storage/v1/object/${BUCKET}/${path}`,{
+      headers:{apikey:SB_KEY,Authorization:`Bearer ${SB_KEY}`},signal:ctrl.signal
+    });
+    clearTimeout(timer);
+    return r.ok?await r.text():null;
+  }catch{return null;}
+}
+async function sbWrite(path,body){
+  try{
+    const ctrl=new AbortController();
+    const timer=setTimeout(()=>ctrl.abort(),5000); // 5s timeout
+    const r=await fetch(`${SB_URL}/storage/v1/object/${BUCKET}/${path}`,{
+      method:'POST',
+      headers:{apikey:SB_KEY,Authorization:`Bearer ${SB_KEY}`,'Content-Type':'application/json','x-upsert':'true'},
+      body, signal:ctrl.signal
+    });
+    clearTimeout(timer);
+    return r.ok||r.status===200||r.status===201;
+  }catch{return false;}
+}
 function canon(p){return{accent:p.accent??'#3b82f6',aiColor:p.aiColor??'#FF5F1F',logoColor:p.logoColor??'#e0e0e0',bgColor:p.bgColor??'#0a0a0a',textColor:p.textColor??'#e0e0e0',isRoot:p.isRoot===true,encrypted:p.encrypted===true,passwordHash:p.passwordHash??null,createdAt:p.createdAt??new Date().toISOString(),updatedAt:new Date().toISOString()};}
+// Aliases so old names work too
+const sbGet=sbFetch;
+const sbPut=sbWrite;
+
 async function loadUser(name){const k=name.toLowerCase();const raw=await sbFetch(`users/${k}.json`);if(raw){try{const p=JSON.parse(raw);MEM[k]=p;await idbSet(k,p);lsSet(k,p);return p;}catch{}}const iv=await idbGet(k);if(iv){MEM[k]=iv;return iv;}const lv=lsGet(k);if(lv){MEM[k]=lv;return lv;}return MEM[k]??null;}
 async function saveUser(name,profile){const k=name.toLowerCase();const p=canon(profile);const body=JSON.stringify(p,null,2);MEM[k]=p;lsSet(k,p);await idbSet(k,p);const cloud=await sbWrite(`users/${k}.json`,body);if(cloud)log('SYNC: ☁ supabase + local','sys');else if(_idbOk)log('SYNC: ◉ local (IDB) — supabase offline','sys');else log('SYNC: ◈ session memory only','sys');return p;}
 async function createUser(name){const ex=await loadUser(name);if(ex)return ex;const p=defP();p.createdAt=new Date().toISOString();return saveUser(name,p);}
+
+/* ALIASES */
+async function loadAliases(username){
+  const k='aliases_'+username.toLowerCase();
+  // try cloud first
+  const ct=await sbGet(`aliases/${username.toLowerCase()}.json`);
+  if(ct){try{const a=JSON.parse(ct);S.aliases=a;lsSet(k,a);await idbSet(k,a);return;}catch{}}
+  // fallback local
+  const iv=await idbGet(k);if(iv){S.aliases=iv;return;}
+  const lv=lsGet(k);if(lv){S.aliases=lv;return;}
+  S.aliases={};
+}
+async function saveAliases(username){
+  const k='aliases_'+username.toLowerCase();
+  const body=JSON.stringify(S.aliases,null,2);
+  lsSet(k,S.aliases);await idbSet(k,S.aliases);
+  await sbWrite(`aliases/${username.toLowerCase()}.json`,body);
+}
+
+/* NATURAL LANGUAGE → COMMAND MAP */
+const NL_MAP=[
+  // games
+  {pat:/^(make|create|build|generate)\s+(me\s+)?(a\s+)?game/i,        fn:i=>'make game '+i.replace(/^(make|create|build|generate)\s+(me\s+)?(a\s+)?game\s*/i,'').trim()},
+  // ascii art
+  {pat:/^(make|draw|create|generate)\s+(me\s+)?(a\s+)?(ascii|text art|picture|image|drawing)/i, fn:i=>'make ascii '+i.replace(/^(make|draw|create|generate)\s+(me\s+)?(a\s+)?(ascii|text art|picture|image|drawing)\s*(of\s+)?/i,'').trim()},
+  // reach / open url
+  {pat:/^(open|go to|visit|browse|launch)\s+(https?:\/\/\S+|\S+\.\S+)/i, fn:i=>{const u=i.match(/(https?:\/\/\S+|\S+\.\S+)/i);return u?'--reach '+u[1]:i;}},
+  // files
+  {pat:/^(show|list|what('s|\s+are)\s+(my\s+)?)?(my\s+)?(files|saves|saved files|disk)/i, fn:_=>'--saves'},
+  // logout
+  {pat:/^(log\s*out|sign\s*out|exit|quit|bye|goodbye|end session)/i,   fn:_=>'--end'},
+  // close window
+  {pat:/^(close|shut|hide)\s+(window|that|it|last)/i,                  fn:_=>'--endx'},
+  // help
+  {pat:/^(help|commands|what can (you|i)|show commands)/i,             fn:_=>'--help'},
+  // save
+  {pat:/^(save\s+(this|that|it|last)(\s+as)?)\s*(\S+)?/i,             fn:i=>{const m=i.match(/save\s+(?:this|that|it|last)(?:\s+as)?\s*(\S+)?/i);return '--save '+(m?.[1]||'output.txt');}},
+];
+
+function nlResolve(input){
+  for(const r of NL_MAP){if(r.pat.test(input)){const res=r.fn(input);if(res&&res!==input)return res;}}
+  return null;
+}
 
 /* HASH */
 async function hash(s){const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(s));return[...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('');}
@@ -152,6 +221,10 @@ LOADING: If the user asks to load/open/fetch something from their disk, respond 
   The terminal will fetch it and display or launch it.
 
 You can self-modify the terminal UI using PATCH_VAR. You have full knowledge of the terminal's systems.
+ALIASES: If the user asks you to "remember", "always do X when I say Y", or "treat X as Y", register it with:
+  [SET_ALIAS shortcut="word"]full command here[/SET_ALIAS]
+  Example: user says "whenever I say mg make a game" → [SET_ALIAS shortcut="mg"]make game[/SET_ALIAS]
+
 When you don't know something current, say so directly. Never break character.`;
 
 async function askAI(msg){
@@ -170,6 +243,15 @@ async function askAI(msg){
     // Check for API error
     if(d.error){log('AI_ERR: '+d.error.message,'err');return;}
     const raw=d.candidates?.[0]?.content?.parts?.[0]?.text||'VOICE_FAILURE.';
+
+    // SET_ALIAS — AI registers an alias on behalf of user
+    for(const m of raw.matchAll(/\[SET_ALIAS shortcut="([^"]+)"\]([\s\S]*?)\[\/SET_ALIAS\]/g)){
+      const shortcut=m[1].trim().toLowerCase();
+      const target=m[2].trim();
+      S.aliases[shortcut]=target;
+      await saveAliases(S.user);
+      log(`ALIAS REGISTERED: <span style="color:var(--accent)">${esc(shortcut)}</span> → ${esc(target)}`,'ok');
+    }
 
     // PATCH_VAR — UI color changes
     for(const m of raw.matchAll(/\[PATCH_VAR name="([^"]+)"\](.*?)\[\/PATCH_VAR\]/gs))
@@ -230,6 +312,7 @@ async function askAI(msg){
       .replace(/\[ASCII_ART\][\s\S]*?\[\/ASCII_ART\]/g, am?'':'')
       .replace(/\[SAVE_FILE[^\]]*\][\s\S]*?\[\/SAVE_FILE\]/g,'')
       .replace(/\[LOAD_FILE[^\]]*\]/g,'')
+      .replace(/\[SET_ALIAS[^\]]*\][\s\S]*?\[\/SET_ALIAS\]/g,'')
       .trim();
     if(disp) log(disp,'ai');
 
@@ -257,13 +340,15 @@ async function listBucket(org=false){
 }
 
 /* AUTH */
-function finishLogin(name,profile){
+async function finishLogin(name,profile){
   S.user=name.toUpperCase();
   S.profile={accent:profile.accent??'#3b82f6',aiColor:profile.aiColor??'#FF5F1F',logoColor:profile.logoColor??'#e0e0e0',bgColor:profile.bgColor??'#0a0a0a',textColor:profile.textColor??'#e0e0e0',isRoot:profile.isRoot===true,encrypted:profile.encrypted===true,passwordHash:profile.passwordHash??null,createdAt:profile.createdAt??null};
   applyTheme(S.profile);updatePrompt();
+  await loadAliases(name);
   const rt=S.profile.isRoot?' <span style="color:#ff3333">[ROOT]</span>':'';
+  const ac=Object.keys(S.aliases).length;
   log(`USER_LOADED: ${S.user}${rt}`,'ok');
-  log(`Welcome back, ${S.user}. Type <span class="hc">--help</span> for commands.`,'inf');
+  log(`Welcome back, ${S.user}.${ac?' '+ac+' alias(es) loaded.':''} Type <span class="hc">--help</span> for commands.`,'inf');
 }
 
 /* INPUT MODES */
@@ -296,6 +381,30 @@ async function exec(raw){
     }else finishLogin(name,profile);
     return;
   }
+  // ── ALIAS RESOLUTION ─────────────────────────
+  // Check if input matches a user-defined alias
+  if(S.user && S.aliases[lo]){
+    const resolved=S.aliases[lo];
+    log(`ALIAS: ${lo} → ${resolved}`,'sys');
+    await exec(resolved);
+    return;
+  }
+  // Check first word alias too
+  const firstWord=lo.split(/\s+/)[0];
+  if(S.user && S.aliases[firstWord] && firstWord!==lo){
+    const resolved=S.aliases[firstWord]+' '+parts.slice(1).join(' ');
+    log(`ALIAS: ${firstWord} → ${resolved.trim()}`,'sys');
+    await exec(resolved.trim());
+    return;
+  }
+
+  // ── NATURAL LANGUAGE RESOLUTION ──────────────
+  const nlResolved=nlResolve(input);
+  if(nlResolved && nlResolved!==input){
+    await exec(nlResolved);
+    return;
+  }
+
   if(!S.user&&cmd!=='--help'){log('NOT LOGGED IN. Use: --usr .(username)','err');return;}
   if(cmd==='--help'){log(`<div class="hb">
 <div style="color:var(--accent);font-weight:900;margin-bottom:10px">── DREAMCORE v3.0 // COMMAND REFERENCE ──</div>
@@ -312,7 +421,16 @@ async function exec(raw){
 <span class="hc">--load (filename)</span><br><span class="hd">&nbsp;&nbsp;Load and launch a saved file from your bucket</span><br><br>
 <span class="hc">make game (description)</span><br><span class="hd">&nbsp;&nbsp;AI generates + launches a playable HTML5 game</span><br><br>
 <span class="hc">make ascii (description)</span><br><span class="hd">&nbsp;&nbsp;AI generates ASCII art in the terminal</span><br><br>
-<span class="hc">(anything else)</span><br><span class="hd">&nbsp;&nbsp;Talk to the AI kernel — it can change colors, explain things, write code, and more</span>
+<span class="hc">--alias set (shortcut) "(command)"</span><br><span class="hd">&nbsp;&nbsp;Create a personal shortcut, e.g. --alias set mg "make game"</span><br><br>
+<span class="hc">--alias list</span><br><span class="hd">&nbsp;&nbsp;Show all your saved aliases</span><br><br>
+<span class="hc">--alias remove (shortcut)</span><br><span class="hd">&nbsp;&nbsp;Delete an alias</span><br><br>
+<span class="hc" style="color:#555">── NATURAL LANGUAGE ──</span><br><br>
+<span class="hd">&nbsp;&nbsp;"make me a game about X" → make game X</span><br>
+<span class="hd">&nbsp;&nbsp;"draw me an ascii skull" → make ascii skull</span><br>
+<span class="hd">&nbsp;&nbsp;"open google.com" → --reach google.com</span><br>
+<span class="hd">&nbsp;&nbsp;"show my files" → --saves</span><br>
+<span class="hd">&nbsp;&nbsp;"log out" → --end</span><br><br>
+<span class="hc">(anything else)</span><br><span class="hd">&nbsp;&nbsp;Talk to the AI kernel — change colors, write code, ask questions, and more</span>
 </div>`,'inf');return;}
   if(cmd==='--reach'){const url=args.join(' ').trim();if(!url){log('USAGE: --reach (url)','err');return;}mkWin({title:'REACH: '+url,w:980,h:620,type:'iframe',content:url});log(`LAUNCHED: ${url}`,'ok');return;}
   if(cmd==='--end'){log(`SESSION ENDED: ${S.user}.`,'sys');S.user=null;S.profile=defP();S.history=[];applyTheme(S.profile);updatePrompt();return;}
@@ -392,6 +510,53 @@ async function exec(raw){
     return;
   }
 
+  // ── --alias ───────────────────────────────────
+  if(cmd==='--alias'){
+    const sub=args[0]?.toLowerCase();
+
+    if(sub==='set'||sub==='add'){
+      // --alias set <shortcut> "<command>"
+      const shortcut=args[1]?.toLowerCase();
+      if(!shortcut){log('USAGE: --alias set (shortcut) "(command)"','err');return;}
+      // everything after the shortcut is the command (strip optional quotes)
+      const target=args.slice(2).join(' ').replace(/^["']|["']$/g,'').trim();
+      if(!target){log('USAGE: --alias set (shortcut) "(command)"','err');return;}
+      S.aliases[shortcut]=target;
+      await saveAliases(S.user);
+      log(`ALIAS SET: <span style="color:var(--accent)">${esc(shortcut)}</span> → ${esc(target)}`,'ok');
+      return;
+    }
+
+    if(sub==='remove'||sub==='rm'||sub==='delete'||sub==='del'){
+      const shortcut=args[1]?.toLowerCase();
+      if(!shortcut||!S.aliases[shortcut]){log(`ALIAS NOT FOUND: ${shortcut||'(none)'}` ,'err');return;}
+      delete S.aliases[shortcut];
+      await saveAliases(S.user);
+      log(`ALIAS REMOVED: ${esc(shortcut)}`,'ok');
+      return;
+    }
+
+    if(sub==='list'||sub==='ls'||!sub){
+      const entries=Object.entries(S.aliases);
+      if(!entries.length){log('NO ALIASES SET. Use: --alias set (shortcut) "(command)"','sys');return;}
+      let h='<table class="ltable"><tr><th>SHORTCUT</th><th>COMMAND</th></tr>';
+      entries.forEach(([k,v])=>h+=`<tr><td style="color:var(--accent)">${esc(k)}</td><td>${esc(v)}</td></tr>`);
+      h+='</table>';
+      log(h,'inf');
+      return;
+    }
+
+    if(sub==='clear'){
+      S.aliases={};
+      await saveAliases(S.user);
+      log('ALL ALIASES CLEARED.','ok');
+      return;
+    }
+
+    log('USAGE: --alias set (shortcut) "(command)" | --alias list | --alias remove (shortcut) | --alias clear','err');
+    return;
+  }
+
   await askAI(input);
 }
 
@@ -400,7 +565,8 @@ $ci.addEventListener('keydown',async e=>{
   if(e.key==='Enter'){const v=$ci.value;$ci.value='';await exec(v);}
   if(e.key==='ArrowUp'){e.preventDefault();if(S.cmdIdx<S.cmdHist.length-1)$ci.value=S.cmdHist[++S.cmdIdx]||'';}
   if(e.key==='ArrowDown'){e.preventDefault();S.cmdIdx>0?$ci.value=S.cmdHist[--S.cmdIdx]:($ci.value='',S.cmdIdx=-1);}
-  if(e.key==='Tab'){e.preventDefault();const C=['--help','--reach ','--end','--endx','--list','.disk -list','--encrypt -usr','--encrypt -usr -reset','--usr .','make game '];const m=C.find(c=>c.startsWith($ci.value)&&c!==$ci.value);if(m)$ci.value=m;}
+  if(e.key==='Tab'){e.preventDefault();const userAliases=Object.keys(S.aliases||{});
+    const C=['--help','--reach ','--end','--endx','--list','.disk -list','--encrypt -usr','--encrypt -usr -reset','--usr .','make game ','make ascii ','--alias set ','--alias list','--alias remove ','--saves','--save ','--load ',...userAliases];const m=C.find(c=>c.startsWith($ci.value)&&c!==$ci.value);if(m)$ci.value=m;}
 });
 document.addEventListener('click',e=>{if(!e.target.closest('.win')&&!e.target.classList.contains('wb'))$ci.focus();});
 
