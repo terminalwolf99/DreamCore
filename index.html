@@ -60,7 +60,7 @@ html,body{background:var(--bg);color:var(--text);font-family:var(--font);height:
   <div id="boot-msg"></div>
   <div id="boot-track"><div id="boot-bar"></div></div>
 </div>
-<div id="hdr"><div><div id="logo"></div><div id="logo-sub">── KERNEL v3.0 // CHROMATIC_SYNC // OPEN_SOURCE ──</div></div><div id="clock">00:00:00</div></div>
+<div id="hdr"><div><div id="logo"></div><div id="logo-sub">── KERNEL v3.0 // IDENTITY // APPS // MEMORY // MULTIPLAYER ──</div></div><div id="clock">00:00:00</div></div>
 <div id="tw"><div id="out"></div><div id="ibar"><span id="pr">GUEST@DREAMCORE:~$</span><input id="ci" type="text" spellcheck="false" autocomplete="off" autofocus></div></div>
 <div id="wm"></div>
 <script>
@@ -68,7 +68,15 @@ const SB_URL='https://wiubdgtfriostbolyjzw.supabase.co';
 const SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndpdWJkZ3Rmcmlvc3Rib2x5anp3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI0NjQ2MDAsImV4cCI6MjA4ODA0MDYwMH0.R9C_-V2KPeVRpPLOcqulDP3FJc79Rb7IMweAo3miDCU';
 const BUCKET='brain.exe';
 const S={user:null,profile:defP(),history:[],cmdHist:[],cmdIdx:-1,wins:[],winZ:600,inputMode:null,inputCtx:{},aliases:{}};
-function defP(){return{accent:'#3b82f6',aiColor:'#FF5F1F',logoColor:'#e0e0e0',bgColor:'#0a0a0a',textColor:'#e0e0e0',isRoot:false,encrypted:false,passwordHash:null,createdAt:null};}
+function defP(){return{
+  accent:'#3b82f6',aiColor:'#FF5F1F',logoColor:'#e0e0e0',bgColor:'#0a0a0a',textColor:'#e0e0e0',
+  isRoot:false,encrypted:false,passwordHash:null,createdAt:null,
+  displayName:'',bio:'',avatar:'',
+  font:'Courier New',scanlineOpacity:0.3,crtFlicker:true,cursorStyle:'block',
+  stats:{gamesCreated:0,libraryUploads:0,appsInstalled:[]},
+  memory:[],installedApps:[],
+  aiPersona:'KERNEL v3.0'
+};}
 const $out=document.getElementById('out'),$ci=document.getElementById('ci'),$pr=document.getElementById('pr'),$boot=document.getElementById('boot'),$bar=document.getElementById('boot-bar'),$msg=document.getElementById('boot-msg'),$wm=document.getElementById('wm');
 
 /* STORAGE */
@@ -102,7 +110,19 @@ async function sbWrite(path,body){
     return r.ok||r.status===200||r.status===201;
   }catch{return false;}
 }
-function canon(p){return{accent:p.accent??'#3b82f6',aiColor:p.aiColor??'#FF5F1F',logoColor:p.logoColor??'#e0e0e0',bgColor:p.bgColor??'#0a0a0a',textColor:p.textColor??'#e0e0e0',isRoot:p.isRoot===true,encrypted:p.encrypted===true,passwordHash:p.passwordHash??null,createdAt:p.createdAt??new Date().toISOString(),updatedAt:new Date().toISOString()};}
+function canon(p){return{
+  accent:p.accent??'#3b82f6',aiColor:p.aiColor??'#FF5F1F',logoColor:p.logoColor??'#e0e0e0',
+  bgColor:p.bgColor??'#0a0a0a',textColor:p.textColor??'#e0e0e0',
+  isRoot:p.isRoot===true,encrypted:p.encrypted===true,
+  passwordHash:p.passwordHash??null,createdAt:p.createdAt??new Date().toISOString(),
+  updatedAt:new Date().toISOString(),
+  displayName:p.displayName??'',bio:p.bio??'',avatar:p.avatar??'',
+  font:p.font??'Courier New',scanlineOpacity:p.scanlineOpacity??0.3,
+  crtFlicker:p.crtFlicker!==false,cursorStyle:p.cursorStyle??'block',
+  stats:p.stats??{gamesCreated:0,libraryUploads:0,appsInstalled:[]},
+  memory:p.memory??[],installedApps:p.installedApps??[],
+  aiPersona:p.aiPersona??'KERNEL v3.0'
+};}
 // sbDelete
 async function sbDelete(path){
   try{
@@ -169,6 +189,11 @@ const NL_MAP=[
   // files
   {pat:/^(show|list|what('s|\s+are)\s+(my\s+)?)?(my\s+)?(files|saves|saved files|disk)/i, fn:_=>'--saves'},
   // logout
+  {pat:/^(browse|open|show|view)\s+(the\s+)?store/i,               fn:_=>'--store'},
+  {pat:/^(show|view|edit|my)\s+profile/i,                           fn:_=>'--profile'},
+  {pat:/^(show|list|view)\s+(my\s+)?memor(y|ies)/i,               fn:_=>'--memory'},
+  {pat:/^(join|enter|go to)\s+room\s+(\S+)/i,                     fn:i=>{const m=i.match(/room\s+(\S+)/i);return m?'--room '+m[1]:'--room';}},
+  {pat:/^remember\s+(.+)/i,                                         fn:i=>'--memory add '+i.replace(/^remember\s+/i,'')},
   {pat:/^(browse|open|show|view)\s+(the\s+)?library/i,          fn:_=>'--library'},
   {pat:/^publish\s+(.+)/i,                                        fn:i=>{const m=i.match(/publish\s+(\S+)/i);return m?'--pub =library '+m[1]:'--pub =library';}},
   {pat:/^(run|launch|play|open|start|load)\s+(\S+)/i, fn:i=>{const m=i.match(/(?:run|launch|play|open|start|load)\s+(\S+)/i);return m?'--load '+m[1]:i;}},
@@ -223,6 +248,62 @@ function mkWin({title='WINDOW',w=820,h=520,type='html',content=''}){
 function dragEl(el,handle){let ox=0,oy=0,mx=0,my=0;handle.addEventListener('mousedown',e=>{if(e.target.classList.contains('wb'))return;e.preventDefault();mx=e.clientX;my=e.clientY;const mm=e2=>{ox=mx-e2.clientX;oy=my-e2.clientY;mx=e2.clientX;my=e2.clientY;el.style.top=(el.offsetTop-oy)+'px';el.style.left=(el.offsetLeft-ox)+'px';};const mu=()=>{document.removeEventListener('mousemove',mm);document.removeEventListener('mouseup',mu);};document.addEventListener('mousemove',mm);document.addEventListener('mouseup',mu);});}
 function closeLastWin(){if(!S.wins.length){log('NO OPEN WINDOWS.','sys');return;}const id=S.wins.pop();document.getElementById(id)?.remove();log('WINDOW CLOSED.','sys');}
 
+/* EXTENDED THEME */
+function applyFullTheme(p){
+  applyTheme(p);
+  // Font
+  const font=p.font||'Courier New';
+  document.documentElement.style.setProperty('--font',`'${font}','Courier New',monospace`);
+  // Scanline
+  const crt=document.getElementById('crt');
+  if(crt) crt.style.opacity=p.scanlineOpacity??0.3;
+  // Flicker
+  document.body.classList.toggle('flicker',p.crtFlicker!==false);
+  // Cursor
+  const cur=p.cursorStyle||'block';
+  const ci=document.getElementById('ci');
+  if(ci){
+    if(cur==='underline') ci.style.caretShape='underscore';
+    else if(cur==='bar') ci.style.caretShape='bar';
+    else ci.style.caretShape='auto';
+  }
+}
+
+/* PROFILE CARD */
+function renderProfile(p, username){
+  const dn=p.displayName||username.toUpperCase();
+  const bio=p.bio||'No bio set.';
+  const avatar=p.avatar||defaultAvatar(username);
+  const joined=p.createdAt?p.createdAt.slice(0,10):'unknown';
+  const games=p.stats?.gamesCreated||0;
+  const uploads=p.stats?.libraryUploads||0;
+  const apps=(p.installedApps||[]).length;
+  const root=p.isRoot?'<span style="color:#ff3333;font-weight:900"> [ROOT]</span>':'';
+  return `<div style="border:1px solid var(--border);border-radius:6px;padding:16px;margin:8px 0;max-width:520px;">
+  <div style="display:flex;gap:16px;align-items:flex-start;">
+    <pre style="font-size:9px;line-height:1.1;color:var(--accent);margin:0;flex-shrink:0;">${esc(avatar)}</pre>
+    <div style="flex:1;">
+      <div style="font-size:15px;font-weight:900;color:var(--text);">${esc(dn)}${root}</div>
+      <div style="font-size:11px;color:#555;margin:2px 0;">@${esc(username.toLowerCase())} · joined ${joined}</div>
+      <div style="font-size:12px;color:#888;margin:6px 0;">${esc(bio)}</div>
+      <div style="display:flex;gap:16px;margin-top:8px;font-size:11px;font-weight:900;">
+        <span style="color:var(--accent)">${games} <span style="color:#555;font-weight:400">games</span></span>
+        <span style="color:var(--accent)">${uploads} <span style="color:#555;font-weight:400">library</span></span>
+        <span style="color:var(--accent)">${apps} <span style="color:#555;font-weight:400">apps</span></span>
+      </div>
+    </div>
+  </div>
+</div>`;
+}
+
+function defaultAvatar(name){
+  const ch=(name||'?')[0].toUpperCase();
+  return `┌─────┐
+│  ${ch}  │
+│     │
+└─────┘`;
+}
+
 /* AI */
 const AI_SYS=`You are KERNEL v3.0 — the living AI core of DreamCore Terminal. You ARE the terminal itself.
 
@@ -253,6 +334,12 @@ LOADING: If the user asks to load/open/fetch something from their disk, respond 
   The terminal will fetch it and display or launch it.
 
 You can self-modify the terminal UI using PATCH_VAR. You have full knowledge of the terminal's systems.
+MEMORY: You have persistent memory for this user. Current memory:
+\${(S.profile.memory||[]).length?(S.profile.memory.map((m,i)=>'['+(i+1)+'] '+m).join('\n')):'(no memories yet)'}
+User persona name: \${S.profile.aiPersona||'KERNEL v3.0'}
+If user says "remember X" or "don't forget X", respond with [REMEMBER]X[/REMEMBER] to save it.
+If user says "forget X" or "clear memory", respond with [FORGET]X[/FORGET] (or [FORGET_ALL] to clear all).
+
 ALIASES: If the user asks you to "remember", "always do X when I say Y", or "treat X as Y", register it with:
   [SET_ALIAS shortcut="word"]full command here[/SET_ALIAS]
   Example: user says "whenever I say mg make a game" → [SET_ALIAS shortcut="mg"]make game[/SET_ALIAS]
@@ -275,6 +362,29 @@ async function askAI(msg){
     // Check for API error
     if(d.error){log('AI_ERR: '+d.error.message,'err');return;}
     const raw=d.candidates?.[0]?.content?.parts?.[0]?.text||'VOICE_FAILURE.';
+
+    // REMEMBER / FORGET — persistent AI memory
+    for(const m of raw.matchAll(/\[REMEMBER\]([\s\S]*?)\[\/REMEMBER\]/g)){
+      const mem=m[1].trim();
+      if(!S.profile.memory) S.profile.memory=[];
+      if(!S.profile.memory.includes(mem)){
+        S.profile.memory.push(mem);
+        if(S.profile.memory.length>50) S.profile.memory.shift();
+        saveUser(S.user,S.profile);
+        log(`MEMORY SAVED: "${esc(mem)}"`, 'ok');
+      }
+    }
+    for(const m of raw.matchAll(/\[FORGET\]([\s\S]*?)\[\/FORGET\]/g)){
+      const mem=m[1].trim();
+      S.profile.memory=(S.profile.memory||[]).filter(x=>!x.toLowerCase().includes(mem.toLowerCase()));
+      saveUser(S.user,S.profile);
+      log(`MEMORY REMOVED: "${esc(mem)}"`, 'sys');
+    }
+    if(raw.includes('[FORGET_ALL]')){
+      S.profile.memory=[];
+      saveUser(S.user,S.profile);
+      log('MEMORY CLEARED.','sys');
+    }
 
     // SET_ALIAS — AI registers an alias on behalf of user
     for(const m of raw.matchAll(/\[SET_ALIAS shortcut="([^"]+)"\]([\s\S]*?)\[\/SET_ALIAS\]/g)){
@@ -346,6 +456,9 @@ async function askAI(msg){
       .replace(/\[SAVE_FILE[^\]]*\][\s\S]*?\[\/SAVE_FILE\]/g,'')
       .replace(/\[LOAD_FILE[^\]]*\]/g,'')
       .replace(/\[SET_ALIAS[^\]]*\][\s\S]*?\[\/SET_ALIAS\]/g,'')
+      .replace(/\[REMEMBER\][\s\S]*?\[\/REMEMBER\]/g,'')
+      .replace(/\[FORGET\][\s\S]*?\[\/FORGET\]/g,'')
+      .replace(/\[FORGET_ALL\]/g,'')
       .trim();
     if(disp) log(disp,'ai');
 
@@ -376,7 +489,7 @@ async function listBucket(org=false){
 async function finishLogin(name,profile){
   S.user=name.toUpperCase();
   S.profile={accent:profile.accent??'#3b82f6',aiColor:profile.aiColor??'#FF5F1F',logoColor:profile.logoColor??'#e0e0e0',bgColor:profile.bgColor??'#0a0a0a',textColor:profile.textColor??'#e0e0e0',isRoot:profile.isRoot===true,encrypted:profile.encrypted===true,passwordHash:profile.passwordHash??null,createdAt:profile.createdAt??null};
-  applyTheme(S.profile);updatePrompt();
+  applyFullTheme(S.profile);updatePrompt();
   await loadAliases(name);
   const rt=S.profile.isRoot?' <span style="color:#ff3333">[ROOT]</span>':'';
   const ac=Object.keys(S.aliases).length;
@@ -445,7 +558,7 @@ async function exec(raw){
     return;
   }
 
-  if(!S.user&&cmd!=='--help'&&cmd!=='--library'){log('NOT LOGGED IN. Use: --usr .(username)','err');return;}
+  if(!S.user&&cmd!=='--help'&&cmd!=='--library'&&!(cmd==='--store'&&(args[0]==='list'||args[0]==='browse'||!args[0]))){log('NOT LOGGED IN. Use: --usr .(username)','err');return;}
   if(cmd==='--help'){log(`<div class="hb">
 <div style="color:var(--accent);font-weight:900;margin-bottom:10px">── DREAMCORE v3.0 // COMMAND REFERENCE ──</div>
 <span class="hc">--usr .(username)</span><br><span class="hd">&nbsp;&nbsp;Sign in or create account</span><br><br>
@@ -474,7 +587,23 @@ async function exec(raw){
 <span class="hc">--library</span><br><span class="hd">&nbsp;&nbsp;Browse The Library — public collection of games, art, and tools</span><br><br>
 <span class="hc">--library run (name)</span><br><span class="hd">&nbsp;&nbsp;Launch an entry from The Library</span><br><br>
 <span class="hc">--library remove (name)</span><br><span class="hd">&nbsp;&nbsp;Remove your own entry from The Library</span><br><br>
-<span class="hc">(anything else)</span><br><span class="hd">&nbsp;&nbsp;Talk to the AI kernel — change colors, write code, ask questions, and more</span>
+<span class="hc" style="color:#555">── IDENTITY ──</span><br><br>
+<span class="hc">--profile</span><br><span class="hd">&nbsp;&nbsp;View your profile card</span><br><br>
+<span class="hc">--profile (username)</span><br><span class="hd">&nbsp;&nbsp;View any user's public profile</span><br><br>
+<span class="hc">--profile edit (field) (value)</span><br><span class="hd">&nbsp;&nbsp;Edit name, bio, avatar, persona</span><br><br>
+<span class="hc">--theme (field) (value)</span><br><span class="hd">&nbsp;&nbsp;Font, scanline, flicker, cursor, reset</span><br><br>
+<span class="hc" style="color:#555">── AI MEMORY ──</span><br><br>
+<span class="hc">--memory</span><br><span class="hd">&nbsp;&nbsp;View what the AI remembers about you</span><br><br>
+<span class="hc">--memory add (text)</span><br><span class="hd">&nbsp;&nbsp;Manually add a memory</span><br><br>
+<span class="hc">--memory remove (n) · --memory clear</span><br><span class="hd">&nbsp;&nbsp;Remove one or all memories</span><br><br>
+<span class="hc" style="color:#555">── APPS ──</span><br><br>
+<span class="hc">--store</span><br><span class="hd">&nbsp;&nbsp;Browse the DreamCore app store</span><br><br>
+<span class="hc">--store install (id) · --store uninstall (id)</span><br><span class="hd">&nbsp;&nbsp;Install or remove an app</span><br><br>
+<span class="hc">--run (script.dc)</span><br><span class="hd">&nbsp;&nbsp;Run a .dc script file from your saves</span><br><br>
+<span class="hc" style="color:#555">── MULTIPLAYER ──</span><br><br>
+<span class="hc">--room (name)</span><br><span class="hd">&nbsp;&nbsp;Join a shared room with other users</span><br><br>
+<span class="hc">--room leave · /say (message)</span><br><span class="hd">&nbsp;&nbsp;Leave room or send a chat message</span><br><br>
+<span class="hc">(anything else)</span><br><span class="hd">&nbsp;&nbsp;Talk to the AI kernel — it remembers you now</span>
 </div>`,'inf');return;}
   if(cmd==='--reach'){const url=args.join(' ').trim();if(!url){log('USAGE: --reach (url)','err');return;}mkWin({title:'REACH: '+url,w:980,h:620,type:'iframe',content:url});log(`LAUNCHED: ${url}`,'ok');return;}
   if(cmd==='--end'){log(`SESSION ENDED: ${S.user}.`,'sys');S.user=null;S.profile=defP();S.history=[];applyTheme(S.profile);updatePrompt();return;}
@@ -719,7 +848,322 @@ async function exec(raw){
     return;
   }
 
+  // ── /say — room chat shortcut ──────────────────
+  if(input.startsWith('/say ')){roomSay(input.slice(5).trim());return;}
+  if(input.startsWith('/s ')){roomSay(input.slice(3).trim());return;}
+
+  // ── --room ───────────────────────────────────────
+  if(cmd==='--room'){
+    const sub=args[0]?.toLowerCase();
+    if(!sub||sub==='list'){
+      log('USAGE: --room (name) to join · --room leave to exit · /say (msg) to chat','inf');
+      if(S.currentRoom) log(`CURRENT ROOM: #${esc(S.currentRoom)}`,'ok');
+      return;
+    }
+    if(sub==='leave'){leaveRoom();return;}
+    joinRoom(args[0]);return;
+  }
+
+  // ── --profile ────────────────────────────────────
+  if(cmd==='--profile'){
+    const sub=args[0]?.toLowerCase();
+
+    if(!sub||sub===S.user?.toLowerCase()){
+      log(renderProfile(S.profile, S.user||'GUEST'),'inf');
+      return;
+    }
+
+    if(sub==='edit'){
+      const field=args[1]?.toLowerCase();
+      const val=args.slice(2).join(' ').trim();
+
+      if(!field){
+        log(`<div class="hb">
+<div style="color:var(--accent);font-weight:900;margin-bottom:8px">── PROFILE EDITOR ──</div>
+<span class="hc">--profile edit name (display name)</span><br>
+<span class="hc">--profile edit bio (your bio)</span><br>
+<span class="hc">--profile edit avatar (ascii art, use \\n for newlines)</span><br>
+<span class="hc">--profile edit persona (AI name)</span><br>
+<span class="hc">--theme font (Courier New|VT323|Share Tech Mono)</span><br>
+<span class="hc">--theme scanline (0.0–1.0)</span><br>
+<span class="hc">--theme flicker (on|off)</span><br>
+<span class="hc">--theme cursor (block|bar|underline)</span>
+</div>`,'inf');
+        return;
+      }
+      if(field==='name'){S.profile.displayName=val;await saveUser(S.user,S.profile);log(`DISPLAY NAME SET: ${esc(val)}`,'ok');return;}
+      if(field==='bio'){S.profile.bio=val;await saveUser(S.user,S.profile);log(`BIO UPDATED.`,'ok');return;}
+      if(field==='avatar'){S.profile.avatar=val.replace(/\\n/g,'\n');await saveUser(S.user,S.profile);log(`AVATAR UPDATED.`,'ok');return;}
+      if(field==='persona'){S.profile.aiPersona=val;await saveUser(S.user,S.profile);log(`AI PERSONA SET: ${esc(val)}`,'ok');return;}
+      log(`UNKNOWN FIELD: ${esc(field)}`,'err');return;
+    }
+
+    // view another user's profile
+    log(`LOADING PROFILE: ${esc(sub)}...`,'sys');
+    const otherP=await loadUser(sub);
+    if(!otherP){log(`USER NOT FOUND: ${esc(sub)}`,'err');return;}
+    log(renderProfile(otherP,sub),'inf');
+    return;
+  }
+
+  // ── --theme ──────────────────────────────────────
+  if(cmd==='--theme'){
+    const field=args[0]?.toLowerCase();
+    const val=args.slice(1).join(' ').trim();
+
+    if(field==='font'){
+      const fonts={'courier':'Courier New','vt323':'VT323','share':'Share Tech Mono','mono':'monospace'};
+      const f=fonts[val.toLowerCase()]||val;
+      S.profile.font=f;
+      // inject Google Font if needed
+      if(f==='VT323'||f==='Share Tech Mono'){
+        const lnk=document.createElement('link');
+        lnk.rel='stylesheet';
+        lnk.href=`https://fonts.googleapis.com/css2?family=${encodeURIComponent(f)}&display=swap`;
+        document.head.appendChild(lnk);
+      }
+      applyFullTheme(S.profile);await saveUser(S.user,S.profile);
+      log(`FONT SET: ${esc(f)}`,'ok');return;
+    }
+    if(field==='scanline'){
+      const v=Math.max(0,Math.min(1,parseFloat(val)||0.3));
+      S.profile.scanlineOpacity=v;applyFullTheme(S.profile);await saveUser(S.user,S.profile);
+      log(`SCANLINE INTENSITY: ${v}`,'ok');return;
+    }
+    if(field==='flicker'){
+      S.profile.crtFlicker=val!=='off';applyFullTheme(S.profile);await saveUser(S.user,S.profile);
+      log(`CRT FLICKER: ${S.profile.crtFlicker?'ON':'OFF'}`,'ok');return;
+    }
+    if(field==='cursor'){
+      const valid=['block','bar','underline'];
+      if(!valid.includes(val)){log('CURSOR: block | bar | underline','err');return;}
+      S.profile.cursorStyle=val;applyFullTheme(S.profile);await saveUser(S.user,S.profile);
+      log(`CURSOR STYLE: ${val}`,'ok');return;
+    }
+    if(field==='reset'){
+      const d=defP();
+      ['font','scanlineOpacity','crtFlicker','cursorStyle','accent','aiColor','logoColor','bgColor','textColor'].forEach(k=>S.profile[k]=d[k]);
+      applyFullTheme(S.profile);await saveUser(S.user,S.profile);
+      log('THEME RESET TO DEFAULTS.','ok');return;
+    }
+    log(`<div class="hb">
+<div style="color:var(--accent);font-weight:900;margin-bottom:8px">── THEME EDITOR ──</div>
+<span class="hc">--theme font (courier|vt323|share|mono)</span><br>
+<span class="hc">--theme scanline (0.0–1.0)</span><br>
+<span class="hc">--theme flicker (on|off)</span><br>
+<span class="hc">--theme cursor (block|bar|underline)</span><br>
+<span class="hc">--theme reset</span>
+</div>`,'inf');return;
+  }
+
+  // ── --memory ─────────────────────────────────────
+  if(cmd==='--memory'){
+    const sub=args[0]?.toLowerCase();
+    if(!sub||sub==='list'){
+      const mem=S.profile.memory||[];
+      if(!mem.length){log('NO MEMORIES. Tell the AI to remember something.','sys');return;}
+      let h='<div class="hb"><div style="color:var(--accent);font-weight:900;margin-bottom:6px">── AI MEMORY ──</div>';
+      mem.forEach((m,i)=>h+=`<div style="margin:3px 0;"><span style="color:var(--accent)">[${i+1}]</span> ${esc(m)}</div>`);
+      h+='<div style="color:#444;font-size:11px;margin-top:6px;">--memory clear · --memory remove (n)</div></div>';
+      log(h,'inf');return;
+    }
+    if(sub==='clear'){S.profile.memory=[];saveUser(S.user,S.profile);log('MEMORY CLEARED.','ok');return;}
+    if(sub==='remove'){
+      const idx=parseInt(args[1])-1;
+      if(isNaN(idx)||idx<0||idx>=(S.profile.memory||[]).length){log('INVALID INDEX.','err');return;}
+      const removed=S.profile.memory.splice(idx,1)[0];
+      saveUser(S.user,S.profile);log(`REMOVED: "${esc(removed)}"`,'ok');return;
+    }
+    if(sub==='add'){
+      const mem=args.slice(1).join(' ').trim();
+      if(!mem){log('USAGE: --memory add (text)','err');return;}
+      S.profile.memory=S.profile.memory||[];
+      S.profile.memory.push(mem);
+      saveUser(S.user,S.profile);log(`MEMORY ADDED: "${esc(mem)}"`,'ok');return;
+    }
+    return;
+  }
+
+  // ── --store ──────────────────────────────────────
+  if(cmd==='--store'){
+    const sub=args[0]?.toLowerCase();
+    if(!sub||sub==='list'||sub==='browse'){await browseStore();return;}
+    if(sub==='install'){
+      const appId=args[1];if(!appId){log('USAGE: --store install (appid)','err');return;}
+      await installApp(appId);return;
+    }
+    if(sub==='uninstall'){
+      const appId=args[1];if(!appId){log('USAGE: --store uninstall (appid)','err');return;}
+      await uninstallApp(appId);return;
+    }
+    if(sub==='publish'){
+      log(`TO PUBLISH AN APP:\n1. Create a folder: store/(yourappid)/\n2. Upload manifest.json with: name, version, author, description, commands\n3. Upload your app files alongside it\n4. Your app appears in --store automatically`,'inf');return;
+    }
+    if(sub==='installed'){
+      const apps=S.profile.installedApps||[];
+      if(!apps.length){log('NO APPS INSTALLED. Try --store to browse.','sys');return;}
+      log('INSTALLED APPS: '+apps.map(a=>esc(a)).join(', '),'ok');return;
+    }
+    await browseStore();return;
+  }
+
+  // ── --run (script.dc) ────────────────────────────
+  if(cmd==='--run'){
+    const fname=args[0];
+    if(!fname){log('USAGE: --run (script.dc) — run a .dc script','err');return;}
+    const path=`saves/${S.user.toLowerCase()}/${fname}`;
+    log(`LOADING SCRIPT: ${esc(fname)}...`,'sys');
+    let src=await sbGet(path);
+    if(!src) try{src=localStorage.getItem('dc3_save_'+S.user.toLowerCase()+'_'+fname);}catch{}
+    if(!src){log(`SCRIPT NOT FOUND: ${esc(fname)}`,'err');return;}
+    await runScript(src);return;
+  }
+
   await askAI(input);
+}
+
+/* ── PHASE 3: .DC SCRIPTING ENGINE ── */
+async function runScript(src){
+  const lines=src.split('\n').map(l=>l.trim()).filter(l=>l&&!l.startsWith('#'));
+  const vars={};
+  log(`RUNNING SCRIPT (${lines.length} lines)...`,'sys');
+  for(let i=0;i<lines.length;i++){
+    let line=lines[i];
+    // variable set: SET name value
+    if(/^SET\s+/i.test(line)){
+      const m=line.match(/^SET\s+(\w+)\s+(.+)/i);
+      if(m) vars[m[1]]=m[2];
+      continue;
+    }
+    // variable substitution
+    line=line.replace(/\$\{(\w+)\}/g,(_,k)=>vars[k]||'');
+    // WAIT ms
+    if(/^WAIT\s+\d+/i.test(line)){
+      await sleep(parseInt(line.split(/\s+/)[1])||500);
+      continue;
+    }
+    // PRINT message
+    if(/^PRINT\s+/i.test(line)){
+      log(esc(line.slice(6).trim()),'inf');
+      continue;
+    }
+    // IF condition THEN cmd
+    if(/^IF\s+/i.test(line)){
+      const m=line.match(/^IF\s+(.+)\s+THEN\s+(.+)/i);
+      if(m){
+        try{ if(eval(m[1].replace(/\$\{(\w+)\}/g,(_,k)=>JSON.stringify(vars[k]||'')))) await exec(m[2]); }
+        catch{}
+      }
+      continue;
+    }
+    // otherwise treat as a terminal command
+    await exec(line);
+    await sleep(80);
+  }
+  log('SCRIPT COMPLETE.','ok');
+}
+
+/* ── PHASE 4: APP STORE ── */
+async function loadAppManifest(appId){
+  const raw=await sbFetch(`store/${appId}/manifest.json`);
+  if(!raw) return null;
+  try{return JSON.parse(raw);}catch{return null;}
+}
+async function installApp(appId){
+  const manifest=await loadAppManifest(appId);
+  if(!manifest){log(`APP NOT FOUND: ${appId}`,'err');return;}
+  if((S.profile.installedApps||[]).includes(appId)){log(`ALREADY INSTALLED: ${appId}`,'sys');return;}
+  // register app commands
+  if(manifest.commands) for(const[cmd,handler] of Object.entries(manifest.commands))
+    S.aliases[cmd]=handler;
+  S.profile.installedApps=[...(S.profile.installedApps||[]),appId];
+  S.profile.stats=S.profile.stats||{};
+  saveUser(S.user,S.profile);
+  log(`INSTALLED: ${manifest.name||appId} v${manifest.version||'1.0'} — ${manifest.description||''}`, 'ok');
+  if(manifest.onInstall) await exec(manifest.onInstall);
+}
+async function uninstallApp(appId){
+  const manifest=await loadAppManifest(appId);
+  S.profile.installedApps=(S.profile.installedApps||[]).filter(a=>a!==appId);
+  if(manifest?.commands) for(const cmd of Object.keys(manifest.commands))
+    if(S.aliases[cmd]) delete S.aliases[cmd];
+  saveUser(S.user,S.profile);
+  log(`UNINSTALLED: ${appId}`,'ok');
+}
+async function browseStore(){
+  log('SCANNING THE STORE...','sys');
+  const files=await sbList('store/');
+  if(!files?.length){log('THE STORE IS EMPTY. Be the first to publish an app with --store publish','sys');return;}
+  const appDirs=[...new Set(files.map(f=>f.name.split('/')[0]).filter(Boolean))];
+  const installed=S.profile.installedApps||[];
+  let h=`<div class="hb"><div style="color:var(--accent);font-weight:900;margin-bottom:10px">── ◈ THE STORE ── DREAMCORE APPS ──</div>`;
+  for(const id of appDirs){
+    const m=await loadAppManifest(id);
+    if(!m) continue;
+    const isInst=installed.includes(id);
+    h+=`<div style="margin:8px 0;padding:8px;border:1px solid var(--border);border-radius:4px;">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <span style="color:var(--accent);font-weight:900;font-size:13px;">${esc(m.name||id)}</span>
+        <span style="color:#555;font-size:10px;">v${esc(m.version||'1.0')} by ${esc(m.author||'unknown')}</span>
+        <span style="color:${isInst?'#00ff88':'#ffaa00'};font-size:10px;margin-left:auto;">${isInst?'✓ INSTALLED':'NOT INSTALLED'}</span>
+      </div>
+      <div style="color:#777;font-size:11px;margin:4px 0;">${esc(m.description||'No description.')}</div>
+      <div style="font-size:10px;color:#444;margin-top:4px;">commands: ${esc(Object.keys(m.commands||{}).join(', ')||'none')}</div>
+    </div>`;
+  }
+  h+='<div style="color:#444;font-size:11px;margin-top:8px;">--store install (id) · --store uninstall (id) · --store publish to submit your own</div></div>';
+  log(h,'inf');
+}
+
+/* ── PHASE 5: MULTIPLAYER ROOMS ── */
+let _rtChannel=null;
+function joinRoom(roomName){
+  if(_rtChannel){_rtChannel.unsubscribe();_rtChannel=null;}
+  if(typeof window.supabase==='undefined'&&typeof createClient==='undefined'){
+    log('REALTIME: loading Supabase SDK...','sys');
+    const s=document.createElement('script');
+    s.src='https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2';
+    s.onload=()=>{ window._sb2=window.supabase.createClient(SB_URL,SB_KEY); _joinRoom(roomName); };
+    document.head.appendChild(s);
+    return;
+  }
+  if(!window._sb2) window._sb2=window.supabase?.createClient(SB_URL,SB_KEY);
+  _joinRoom(roomName);
+}
+function _joinRoom(roomName){
+  if(!window._sb2){log('REALTIME: Supabase not available.','err');return;}
+  S.currentRoom=roomName;
+  _rtChannel=window._sb2.channel('room:'+roomName,{config:{presence:{key:S.user||'GUEST'}}});
+  _rtChannel
+    .on('broadcast',{event:'msg'},({payload})=>{
+      if(payload.user!==S.user)
+        log(`<span style="color:var(--accent)">${esc(payload.user)}</span><span style="color:#555"> in #${esc(roomName)}:</span> ${esc(payload.text)}`,'inf');
+    })
+    .on('broadcast',{event:'cmd'},({payload})=>{
+      if(payload.user!==S.user)
+        log(`<span style="color:#555">${esc(payload.user)} ran:</span> ${esc(payload.cmd)}`,'sys');
+    })
+    .on('presence',{event:'sync'},()=>{
+      const state=_rtChannel.presenceState();
+      const users=Object.keys(state);
+      log(`ROOM #${esc(roomName)} — online: ${users.map(u=>esc(u)).join(', ')}`,'sys');
+    })
+    .subscribe(status=>{
+      if(status==='SUBSCRIBED'){
+        _rtChannel.track({user:S.user,joinedAt:new Date().toISOString()});
+        log(`JOINED ROOM: #${esc(roomName)} — use /say (message) to chat`,'ok');
+      }
+    });
+}
+function leaveRoom(){
+  if(!_rtChannel){log('NOT IN A ROOM.','sys');return;}
+  _rtChannel.unsubscribe();_rtChannel=null;S.currentRoom=null;
+  log('LEFT ROOM.','sys');
+}
+function roomSay(text){
+  if(!_rtChannel){log('NOT IN A ROOM. Use --room (name) to join.','err');return;}
+  _rtChannel.send({type:'broadcast',event:'msg',payload:{user:S.user,text}});
+  log(`<span style="color:var(--accent)">${esc(S.user)}</span><span style="color:#555"> in #${esc(S.currentRoom)}:</span> ${esc(text)}`,'inf');
 }
 
 /* KEYBOARD */
@@ -728,7 +1172,7 @@ $ci.addEventListener('keydown',async e=>{
   if(e.key==='ArrowUp'){e.preventDefault();if(S.cmdIdx<S.cmdHist.length-1)$ci.value=S.cmdHist[++S.cmdIdx]||'';}
   if(e.key==='ArrowDown'){e.preventDefault();S.cmdIdx>0?$ci.value=S.cmdHist[--S.cmdIdx]:($ci.value='',S.cmdIdx=-1);}
   if(e.key==='Tab'){e.preventDefault();const userAliases=Object.keys(S.aliases||{});
-    const C=['--help','--reach ','--end','--endx','--list','.disk -list','--encrypt -usr','--encrypt -usr -reset','--usr .','make game ','make ascii ','--alias set ','--alias list','--alias remove ','--saves','--save ','--load ','--pub =library ','--library','--library run ','--library remove ',...userAliases];const m=C.find(c=>c.startsWith($ci.value)&&c!==$ci.value);if(m)$ci.value=m;}
+    const C=['--help','--reach ','--end','--endx','--list','.disk -list','--encrypt -usr','--encrypt -usr -reset','--usr .','make game ','make ascii ','--alias set ','--alias list','--alias remove ','--saves','--save ','--load ','--pub =library ','--library','--library run ','--library remove ','--profile','--profile edit ','--theme ','--memory','--memory add ','--store','--store install ','--run ','--room ','--room leave','/say ',...userAliases];const m=C.find(c=>c.startsWith($ci.value)&&c!==$ci.value);if(m)$ci.value=m;}
 });
 document.addEventListener('click',e=>{if(!e.target.closest('.win')&&!e.target.classList.contains('wb'))$ci.focus();});
 
