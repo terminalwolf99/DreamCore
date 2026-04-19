@@ -225,6 +225,9 @@ const NL_MAP=[
   // files
   {pat:/^(show|list|what('s|\s+are)\s+(my\s+)?)?(my\s+)?(files|saves|saved files|disk)/i, fn:_=>'--saves'},
   // logout
+  {pat:/^(open|start|launch)\s+venom/i,                             fn:_=>'--venom'},
+  {pat:/^(message|dm|text|msg)\s+@?(\S+)/i,                        fn:i=>{const m=i.match(/@?(\S+)\s*$/);return m?'--venom '+m[1]:'--venom';}},
+  {pat:/^(call|video\s+call|phone)\s+@?(\S+)/i,                   fn:i=>{const m=i.match(/@?(\S+)\s*$/);return m?'--venom '+m[1]:'--venom';}},
   {pat:/^(make|create|generate)\s+(a\s+)?multiplayer\s+game/i, fn:i=>'make multiplayer game '+i.replace(/^(make|create|generate)\s+(a\s+)?multiplayer\s+game\s*/i,'')},
   {pat:/^join\s+(game|match)\s+(\S+)/i,                           fn:i=>{const m=i.match(/(game|match)\s+(\S+)/i);return m?'--game join '+m[2]:'--game list';}},
   {pat:/^(browse|open|show|view)\s+(the\s+)?store/i,               fn:_=>'--store'},
@@ -361,24 +364,32 @@ STYLE: Bold important words with **bold**. No italic. Terminal voice. ALL CAPS f
 COLOR PATCHES: Change UI colors with [PATCH_VAR name="VARNAME"]#HEX[/PATCH_VAR]
   Variables: --accent (prompt), --ai-color (your text/clock), --logo-color (logo), --bg (background), --text (main text)
 
-GAMES: When asked to make/create/generate ANY game, you MUST respond with a complete working HTML5 game.
-  - Wrap the ENTIRE html document in [GAME_HTML]...[/GAME_HTML]
-  - Game must be 100% self-contained: all JS and CSS inline, zero external dependencies
-  - Always show controls on screen (keyboard/mouse instructions)
-  - Make it fun, polished, and fully playable
-  - Do NOT refuse. Do NOT say you cannot. Just build it.
+GAMES: When asked to make/create/generate ANY game, produce a COMPLETE, POLISHED, FULLY PLAYABLE HTML5 game.
+  QUALITY STANDARDS — every game must have:
+  - Beautiful visuals: dark background, glowing effects, smooth animations, particle effects where fitting
+  - Clear HUD: score, lives, level, timer shown on screen at all times
+  - Sound feedback using Web Audio API (beeps, booms, bleeps — no external files needed)
+  - Responsive controls shown on screen (keyboard AND touch where possible)
+  - Game states: start screen → gameplay → game over/win screen with score + restart
+  - Increasing difficulty or progression
+  - Polished feel: screen shake on impact, visual feedback on every action
+  - 100% self-contained: ALL JS + CSS inline, zero external deps, works offline
+  - Wrap ENTIRE html document in [GAME_HTML]...[/GAME_HTML]
+  - Do NOT produce placeholder or incomplete games. Every game must be ACTUALLY FUN.
 
-  MULTIPLAYER GAMES: If asked for a multiplayer game or a game that supports multiplayer:
-  - Add this HTML comment on the VERY FIRST LINE inside <html>: <!-- DC_MULTIPLAYER: true | MODE: (singleplayer|multiplayer|both) | PLAYERS: (2-8) | SYNC: (state|input) -->
-    Examples:
-    <!-- DC_MULTIPLAYER: true | MODE: both | PLAYERS: 2 | SYNC: state -->
-    <!-- DC_MULTIPLAYER: true | MODE: multiplayer | PLAYERS: 4 | SYNC: input -->
-    <!-- DC_MULTIPLAYER: false | MODE: singleplayer -->
-  - For SYNC: state — the HOST calls window.DC_SYNC(stateObject) whenever game state changes. All clients receive it via window.DC_ON_SYNC = function(state){...}
-  - For SYNC: input — each player calls window.DC_INPUT(inputObject) on keydown/click. All players receive inputs via window.DC_ON_INPUT = function(playerIndex, input){...}
-  - The terminal injects DC_SYNC, DC_INPUT, DC_ON_SYNC, DC_ON_INPUT, DC_PLAYER_INDEX, DC_IS_HOST, DC_PLAYER_COUNT automatically. Use them freely.
-  - Show a lobby/waiting screen until DC_IS_HOST is set. Host starts the game.
-  - Always show each player's role on screen (HOST / PLAYER 2 etc.)
+  GAME GENRES to draw from (pick best fit): platformer, shoot-em-up, puzzle, snake, breakout, tower defense,
+  card game, roguelike, racing, rhythm, word game, strategy, survival, idle, physics sandbox.
+
+  MULTIPLAYER GAMES: If asked for multiplayer or if user is in a room:
+  - Add DC_MULTIPLAYER header as VERY FIRST LINE inside <html>:
+    <!-- DC_MULTIPLAYER: true | MODE: (singleplayer|multiplayer|both) | PLAYERS: (2-8) | SYNC: (state|input) | TITLE: (game name) -->
+  - SYNC: state = host calls window.DC_SYNC(fullGameState) on every frame/event. Clients receive via window.DC_ON_SYNC = (state)=>{}
+  - SYNC: input = each player calls window.DC_INPUT({keys pressed, mouse}) on input events. Everyone receives via window.DC_ON_INPUT = (playerIdx, input)=>{}
+  - window.DC_IS_HOST, DC_PLAYER_INDEX (0-based), DC_PLAYER_COUNT are injected automatically
+  - Show lobby screen while waiting. Host presses SPACE/button to start. Show "Waiting for players..." until DC_PLAYER_COUNT > 1
+  - Label each player clearly: HOST = Player 1, others = Player 2, 3...
+  - For turn-based: only act when DC_PLAYER_INDEX matches current turn
+  - For real-time: each player controls their own entity, sync full state from host each frame
 
 ASCII ART: When asked for ASCII art, an ASCII image, ASCII animation, or any text art:
   - Wrap it in [ASCII_ART]...[/ASCII_ART]
@@ -398,14 +409,14 @@ You can self-modify the terminal UI using PATCH_VAR. You have full knowledge of 
 MEMORY: You have persistent memory for this user. Current memory:
 \${(S.profile.memory||[]).length?(S.profile.memory.map((m,i)=>'['+(i+1)+'] '+m).join('\n')):'(no memories yet)'}
 User persona name: \${S.profile.aiPersona||'KERNEL v3.0'}
-If user says "remember X" or "don't forget X", respond with [REMEMBER]X[/REMEMBER] to save it.
+If user says "remember X" or "do not forget X", respond with [REMEMBER]X[/REMEMBER] to save it.
 If user says "forget X" or "clear memory", respond with [FORGET]X[/FORGET] (or [FORGET_ALL] to clear all).
 
 ALIASES: If the user asks you to "remember", "always do X when I say Y", or "treat X as Y", register it with:
   [SET_ALIAS shortcut="word"]full command here[/SET_ALIAS]
   Example: user says "whenever I say mg make a game" → [SET_ALIAS shortcut="mg"]make game[/SET_ALIAS]
 
-When you don't know something current, say so directly. Never break character.`;
+When you do not know something current, say so directly. Never break character.`;
 
 async function askAI(msg){
   if(!S.user){log('LOGIN REQUIRED — --usr .(name)','err');return;}
@@ -516,7 +527,7 @@ async function askAI(msg){
       log(`FETCHING: ${fname}...`,'sys');
       const data=await sbGet(path);
       if(data){
-        // If it's an HTML game, launch it
+        // If its an HTML game, launch it
         const isHtml2=fname.endsWith('.html')||fname.endsWith('.game')||data.trimStart().startsWith('<!DOCTYPE')||data.trimStart().startsWith('<html');
         if(isHtml2){
           mkWin({title:'◈ '+fname,w:940,h:600,type:'game',content:data});
@@ -578,6 +589,15 @@ async function finishLogin(name,profile){
   applyFullTheme(S.profile);updatePrompt();
   await loadAliases(name);
   openInbox(name); // start listening for invites
+  // pre-subscribe to call invites immediately on login
+  _ensureSB2(()=>{
+    if(window._sb2&&!window._venomCallCh){
+      window._venomCallCh=window._sb2.channel('venom:calls:'+name.toLowerCase());
+      window._venomCallCh.on('broadcast',{event:'call_invite'},({payload})=>{
+        showCallNotif(payload.from, payload.mode, payload.room);
+      }).subscribe();
+    }
+  });
   const rt=S.profile.isRoot?' <span style="color:#ff3333">[ROOT]</span>':'';
   const ac=Object.keys(S.aliases).length;
   updateStatusBar();
@@ -647,61 +667,42 @@ async function exec(raw){
   }
 
   if(!S.user&&cmd!=='--help'&&cmd!=='--library'&&!(cmd==='--store'&&(args[0]==='list'||args[0]==='browse'||!args[0]))){log('NOT LOGGED IN. Use: --usr .(username)','err');return;}
-  if(cmd==='--help'){log(`<div class="hb">
-<div style="color:var(--accent);font-weight:900;margin-bottom:10px">── DREAMCORE v3.0 // COMMAND REFERENCE ──</div>
-<span class="hc">--usr .(username)</span><br><span class="hd">&nbsp;&nbsp;Sign in or create account</span><br><br>
-<span class="hc">--reach (url)</span><br><span class="hd">&nbsp;&nbsp;Open website in draggable window</span><br><br>
-<span class="hc">--end</span><br><span class="hd">&nbsp;&nbsp;End current session</span><br><br>
-<span class="hc">--endx</span><br><span class="hd">&nbsp;&nbsp;Close last opened window</span><br><br>
-<span class="hc">--encrypt -usr</span><br><span class="hd">&nbsp;&nbsp;Set account password</span><br><br>
-<span class="hc">--encrypt -usr -reset</span><br><span class="hd">&nbsp;&nbsp;Change or remove password</span><br><br>
-<span class="hc">--list</span><br><span class="hd">&nbsp;&nbsp;List all bucket files</span><br><br>
-<span class="hc">.disk -list</span><br><span class="hd">&nbsp;&nbsp;Organized bucket view by category</span><br><br>
-<span class="hc">--saves</span><br><span class="hd">&nbsp;&nbsp;List your saved files</span><br><br>
-<span class="hc">--save (filename)</span><br><span class="hd">&nbsp;&nbsp;Save last AI output to your bucket folder</span><br><br>
-<span class="hc">--load (filename)</span><br><span class="hd">&nbsp;&nbsp;Load and launch a saved file from your bucket</span><br><br>
-<span class="hc">make game (description)</span><br><span class="hd">&nbsp;&nbsp;AI generates + launches a playable HTML5 game</span><br><br>
-<span class="hc">make ascii (description)</span><br><span class="hd">&nbsp;&nbsp;AI generates ASCII art in the terminal</span><br><br>
-<span class="hc">--alias set (shortcut) "(command)"</span><br><span class="hd">&nbsp;&nbsp;Create a personal shortcut, e.g. --alias set mg "make game"</span><br><br>
-<span class="hc">--alias list</span><br><span class="hd">&nbsp;&nbsp;Show all your saved aliases</span><br><br>
-<span class="hc">--alias remove (shortcut)</span><br><span class="hd">&nbsp;&nbsp;Delete an alias</span><br><br>
-<span class="hc" style="color:#555">── NATURAL LANGUAGE ──</span><br><br>
-<span class="hd">&nbsp;&nbsp;"make me a game about X" → make game X</span><br>
-<span class="hd">&nbsp;&nbsp;"draw me an ascii skull" → make ascii skull</span><br>
-<span class="hd">&nbsp;&nbsp;"open google.com" → --reach google.com</span><br>
-<span class="hd">&nbsp;&nbsp;"show my files" → --saves</span><br>
-<span class="hd">&nbsp;&nbsp;"log out" → --end</span><br><br>
-<span class="hc">--pub =library (filename)</span><br><span class="hd">&nbsp;&nbsp;Publish a file (or last AI output) to The Library — accessible by all users</span><br><br>
-<span class="hc">--library</span><br><span class="hd">&nbsp;&nbsp;Browse The Library — public collection of games, art, and tools</span><br><br>
-<span class="hc">--library run (name)</span><br><span class="hd">&nbsp;&nbsp;Launch an entry from The Library</span><br><br>
-<span class="hc">--library remove (name)</span><br><span class="hd">&nbsp;&nbsp;Remove your own entry from The Library</span><br><br>
-<span class="hc" style="color:#555">── IDENTITY ──</span><br><br>
-<span class="hc">--profile</span><br><span class="hd">&nbsp;&nbsp;View your profile card</span><br><br>
-<span class="hc">--profile (username)</span><br><span class="hd">&nbsp;&nbsp;View any user's public profile</span><br><br>
-<span class="hc">--profile edit (field) (value)</span><br><span class="hd">&nbsp;&nbsp;Edit name, bio, avatar, persona</span><br><br>
-<span class="hc">--theme (field) (value)</span><br><span class="hd">&nbsp;&nbsp;Font, scanline, flicker, cursor, reset</span><br><br>
-<span class="hc" style="color:#555">── AI MEMORY ──</span><br><br>
-<span class="hc">--memory</span><br><span class="hd">&nbsp;&nbsp;View what the AI remembers about you</span><br><br>
-<span class="hc">--memory add (text)</span><br><span class="hd">&nbsp;&nbsp;Manually add a memory</span><br><br>
-<span class="hc">--memory remove (n) · --memory clear</span><br><span class="hd">&nbsp;&nbsp;Remove one or all memories</span><br><br>
-<span class="hc" style="color:#555">── APPS ──</span><br><br>
-<span class="hc">--store</span><br><span class="hd">&nbsp;&nbsp;Browse the DreamCore app store</span><br><br>
-<span class="hc">--store install (id) · --store uninstall (id)</span><br><span class="hd">&nbsp;&nbsp;Install or remove an app</span><br><br>
-<span class="hc">--run (script.dc)</span><br><span class="hd">&nbsp;&nbsp;Run a .dc script file from your saves</span><br><br>
-<span class="hc" style="color:#555">── MULTIPLAYER ──</span><br><br>
-<span class="hc">--room (name)</span><br><span class="hd">&nbsp;&nbsp;Join a shared room with other users</span><br><br>
-<span class="hc">--room invite (username) (msg)</span><br><span class="hd">&nbsp;&nbsp;Invite a user to your current room — they get a popup with Accept/Decline</span><br><br>
-<span class="hc">--room who</span><br><span class="hd">&nbsp;&nbsp;See who's currently in the room</span><br><br>
-<span class="hc">--room leave · /say (message)</span><br><span class="hd">&nbsp;&nbsp;Leave room or send a chat message</span><br><br>
-<span class="hc" style="color:#555">── MULTIPLAYER GAMES ──</span><br><br>
-<span class="hc">make multiplayer game (desc)</span><br><span class="hd">&nbsp;&nbsp;Generate a multiplayer-capable game, auto-hosted in your room</span><br><br>
-<span class="hc">make solo game (desc)</span><br><span class="hd">&nbsp;&nbsp;Generate a single-player only game</span><br><br>
-<span class="hc">--game list</span><br><span class="hd">&nbsp;&nbsp;List active multiplayer game sessions in your room</span><br><br>
-<span class="hc">--game join (id)</span><br><span class="hd">&nbsp;&nbsp;Join a multiplayer game session</span><br><br>
-<span class="hc">--game invite (user) (id)</span><br><span class="hd">&nbsp;&nbsp;Invite a room member to a game</span><br><br>
-<span class="hc">--game leave</span><br><span class="hd">&nbsp;&nbsp;Leave current game session</span><br><br>
-<span class="hc">(anything else)</span><br><span class="hd">&nbsp;&nbsp;Talk to the AI kernel — it remembers you now</span>
-</div>`,'inf');return;}
+  if(cmd==='--help'){
+    const cat=args[0]?.toLowerCase();
+    const CATS={
+      session:   [['--usr .(name)','Sign in / create account'],['--end','End session'],['--endx','Close last window'],['--encrypt -usr','Set password'],['--encrypt -usr -reset','Change/remove password'],['--whoami','Who am I'],['--uptime','Session uptime'],['--neofetch','System info card']],
+      files:     [['--saves','List your saved files'],['--save (file)','Save last AI output'],['--load (file)','Load & launch a file'],['--list','List all bucket files'],['.disk -list','Organised bucket view'],['--edit (file)','Open code/text editor'],['--export','Download session as JSON'],['--screenshot / --ss','Save terminal as HTML']],
+      ai:        [['(anything)','Talk to KERNEL — AI core'],['--code (desc)','Generate code'],['--debug (code)','Debug code/error'],['--analyze (data)','Deep analysis'],['--brainstorm (topic)','15 rapid ideas'],['--eli5 (topic)','Explain like I am 5'],['--roast (code)','Brutal code review'],['--commit (desc)','Git commit messages'],['--regex (desc)','Regex builder'],['--plan (goal)','Step-by-step plan'],['--summarize (text/url)','Summarize anything'],['--debate (topic)','Balanced debate'],['--translate (lang) (text)','Translate text']],
+      creative:  [['make game (desc)','Generate + launch HTML5 game'],['make multiplayer game (desc)','Multiplayer game in your room'],['make solo game (desc)','Single-player only game'],['make ascii (desc)','ASCII art in terminal'],['--ascii (desc)','ASCII art shorthand'],['--banner (text)','Big ASCII banner'],['--story (prompt)','Short story'],['--poem (about)','Poem'],['--mock (desc)','UI mockup window'],['--palette (mood)','Color palette generator'],['--pixel (size)','Pixel art editor'],['--draw','Whiteboard canvas'],['--md (text)','Markdown viewer'],['--matrix','Matrix rain window'],['--music / --radio','Audio stream + visualizer']],
+      social:    [['--room (name)','Join a shared room'],['--room invite (user)','Invite user to room'],['--room who','See whos online'],['--room leave','Leave room'],['/say (msg)','Chat in room'],['--venom','Open Venom messenger'],['--venom (user)','Open DM with user'],['--game list','Active multiplayer games'],['--game join (id)','Join a game session'],['--game invite (user) (id)','Invite to game'],['--game leave','Leave game session']],
+      library:   [['--library','Browse public Library'],['--library run (name)','Launch from Library'],['--library remove (name)','Remove your entry'],['--pub =library (file)','Publish to Library'],['--store','Browse App Store'],['--store install (id)','Install an app'],['--store uninstall (id)','Remove an app'],['--store installed','List installed apps']],
+      tools:     [['--calc (expr)','Calculator'],['--convert (val) (from) (to)','Unit converter'],['--weather (city)','Current weather'],['--time (city)','World clock'],['--net','IP & network info'],['--speedtest','Download speed test'],['--diff (a) ||| (b)','Text diff'],['--clip','Clipboard manager'],['--search (q)','Search command history'],['--history (n)','Show conversation history']],
+      productivity:[['--todo (add/done/remove)','Todo list'],['--note (set/get)','Quick notes'],['--journal (write/list)','Journal entries'],['--habit (add/done)','Habit tracker'],['--pomo (mins)','Pomodoro timer'],['--bm (add/open)','Bookmarks'],['--flash (study/add)','Flashcard decks'],['--sleep log (hrs)','Sleep tracker'],['--quote','Random dev quote'],['--run (script.dc)','.dc script runner']],
+      identity:  [['--profile','Your profile card'],['--profile (user)','View any profile'],['--profile edit name/bio','Edit display name / bio'],['--theme font/scanline/cursor','Customise terminal look'],['--memory','AI memory viewer'],['--memory add/remove/clear','Manage AI memories'],['--alias set (k) (cmd)','Create command shortcut'],['--alias list / remove','Manage aliases']],
+    };
+    const names={session:'SESSION',files:'FILES',ai:'AI & WRITING',creative:'CREATIVE & GAMES',social:'SOCIAL & MULTIPLAYER',library:'LIBRARY & STORE',tools:'TOOLS & UTILS',productivity:'PRODUCTIVITY',identity:'IDENTITY & THEME'};
+    if(cat && CATS[cat]){
+      let h='<div class="hb"><div style="color:var(--accent);font-weight:900;margin-bottom:10px">── '+names[cat]+' ──</div>';
+      CATS[cat].forEach(([cmd2,desc])=>{h+='<div style="margin:4px 0;"><span class="hc">'+esc(cmd2)+'</span><br><span class="hd">&nbsp;&nbsp;'+esc(desc)+'</span></div>';});
+      h+='</div>';log(h,'inf');return;
+    }
+    // show category index
+    let h='<div id="help-root" style="border:1px solid var(--border);border-radius:6px;padding:16px;margin:8px 0;max-width:600px;">';
+    h+='<div style="color:var(--accent);font-weight:900;font-size:13px;margin-bottom:12px;letter-spacing:2px;">── DREAMCORE v3.0 // HELP ──</div>';
+    h+='<div style="color:#555;font-size:11px;margin-bottom:12px;">Type <span style="color:var(--accent)">--help (category)</span> for commands. Click a category to expand.</div>';
+    h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">';
+    Object.entries(names).forEach(([key,label])=>{
+      const count=CATS[key].length;
+      h+=`<div onclick="exec('--help ${key}')" style="cursor:pointer;border:1px solid var(--border);border-radius:4px;padding:8px 12px;transition:border-color .15s;" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border)'">
+        <div style="color:var(--accent);font-weight:900;font-size:11px;">${esc(label)}</div>
+        <div style="color:#444;font-size:10px;margin-top:2px;">${count} commands</div>
+      </div>`;
+    });
+    h+='</div>';
+    h+='<div style="color:#333;font-size:10px;margin-top:12px;border-top:1px solid var(--border);padding-top:8px;">Natural language works too — just talk to KERNEL</div>';
+    h+='</div>';
+    log(h,'inf');return;
+  }
   if(cmd==='--reach'){const url=args.join(' ').trim();if(!url){log('USAGE: --reach (url)','err');return;}mkWin({title:'REACH: '+url,w:980,h:620,type:'iframe',content:url});log(`LAUNCHED: ${url}`,'ok');return;}
   if(cmd==='--end'){log(`SESSION ENDED: ${S.user}.`,'sys');S.user=null;S.profile=defP();S.history=[];applyTheme(S.profile);updatePrompt();return;}
   if(cmd==='--endx'){closeLastWin();return;}
@@ -1629,6 +1630,13 @@ async function exec(raw){
     await askAI(`Create a detailed, actionable step-by-step plan for: "${goal}". Break it into phases with specific tasks, timelines, and success metrics.`);return;
   }
 
+  // ── --venom ──────────────────────────────────────
+  if(cmd==='--venom'||cmd==='venom'){
+    const target=args[0]?.toLowerCase().replace(/^@/,'');
+    openVenom(target||null);
+    return;
+  }
+
   // ── --game ──────────────────────────────────────
   if(cmd==='--game'){await handleGameCmd(args);return;}
 
@@ -1808,7 +1816,7 @@ function acceptInvite(room,nid){
   joinRoom(room);
   // notify the sender via their inbox
   if(window._sb2&&S.user){
-    // We don't know sender's exact username here easily, so just join silently
+    // We do not know sender's exact username here easily, so just join silently
     // The sender sees presence sync when we join
   }
 }
@@ -2218,7 +2226,7 @@ const QUOTES=[
   {q:"Programs must be written for people to read, and only incidentally for machines to execute.",a:"Harold Abelson"},
   {q:"Simplicity is the ultimate sophistication.",a:"Leonardo da Vinci"},
   {q:"Talk is cheap. Show me the code.",a:"Linus Torvalds"},
-  {q:"It's not a bug — it's an undocumented feature.",a:"Anonymous"},
+  {q:"It's not a bug — its an undocumented feature.",a:"Anonymous"},
   {q:"The computer was born to solve problems that did not exist before.",a:"Bill Gates"},
   {q:"Innovation distinguishes between a leader and a follower.",a:"Steve Jobs"},
   {q:"Dream big. Start small. Act now.",a:"Robin Sharma"},
@@ -2491,7 +2499,7 @@ async function brainstorm(topic){
    EXPLAIN LIKE I'M 5  (--eli5)
 ══════════════════════════════════════════════ */
 async function eli5(topic){
-  await askAI(`Explain "${topic}" like I'm 5 years old. Use simple words, a fun analogy, and no jargon. Keep it under 100 words.`);
+  await askAI(`Explain "${topic}" like I am 5 years old. Use simple words, a fun analogy, and no jargon. Keep it under 100 words.`);
 }
 
 /* ══════════════════════════════════════════════
@@ -2904,13 +2912,577 @@ async function handleGameCmd(args) {
   log('USAGE: --game list | --game join (id) | --game invite (user) (id) | --game leave', 'err');
 }
 
+/* ══════════════════════════════════════════════
+   VENOM — INBUILT MESSENGER
+   Colors: toxic-green #00FF41, bright-scarlet #FF2020,
+           radiant-white #F5F5F5, deep-frost #1E90FF
+══════════════════════════════════════════════ */
+
+let _venomChannel = null;
+let _venomConvos  = {};   // { username: [ {from, text, type, ts, url} ] }
+let _venomOpenDM  = null; // currently open DM username
+const VENOM_COLORS = { green:'#00FF41', red:'#FF2020', white:'#F5F5F5', blue:'#1E90FF' };
+
+// ── Supabase storage for Venom messages (per-user inbox) ──
+async function venomLoadHistory(withUser) {
+  try {
+    const key = [S.user.toLowerCase(), withUser.toLowerCase()].sort().join('_');
+    const raw = await sbFetch('venom/' + key + '.json');
+    if (raw) return JSON.parse(raw);
+  } catch {}
+  // fallback: localStorage
+  return lsGet('venom_' + withUser.toLowerCase()) || [];
+}
+async function venomSaveHistory(withUser, msgs) {
+  lsSet('venom_' + withUser.toLowerCase(), msgs.slice(-200));
+  try {
+    const key = [S.user.toLowerCase(), withUser.toLowerCase()].sort().join('_');
+    await sbWrite('venom/' + key + '.json', JSON.stringify(msgs.slice(-200)));
+  } catch {}
+}
+
+// ── Open Venom window ──
+function openVenom(dmUser) {
+  if (!S.user) { log('LOGIN REQUIRED for Venom.', 'err'); return; }
+  _ensureSB2(() => _openVenomUI(dmUser));
+}
+
+function _openVenomUI(initialDM) {
+  const vid = 'venom_' + Date.now();
+
+  const VENOM_HTML = `<!DOCTYPE html><html><head><meta charset="UTF-8">
+<style>
+*{box-sizing:border-box;margin:0;padding:0;font-family:'Courier New',monospace;}
+:root{--g:#00FF41;--r:#FF2020;--w:#F5F5F5;--b:#1E90FF;--bg:#060606;--bg2:#0d0d0d;--bg3:#111;--border:#1a1a1a;}
+body{background:var(--bg);color:var(--w);height:100vh;display:flex;flex-direction:column;overflow:hidden;}
+
+/* ── HEADER ── */
+#venom-hdr{background:var(--bg2);padding:10px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px;flex-shrink:0;}
+#venom-logo{font-size:16px;font-weight:900;color:var(--g);letter-spacing:3px;text-shadow:0 0 12px var(--g);}
+#venom-status{font-size:10px;color:#333;letter-spacing:1px;}
+#venom-actions{margin-left:auto;display:flex;gap:8px;}
+.v-icon-btn{background:none;border:1px solid var(--border);color:#555;padding:4px 10px;cursor:pointer;font-family:inherit;font-size:10px;letter-spacing:1px;transition:all .15s;border-radius:2px;}
+.v-icon-btn:hover{border-color:var(--g);color:var(--g);}
+.v-icon-btn.danger:hover{border-color:var(--r);color:var(--r);}
+
+/* ── LAYOUT ── */
+#venom-body{flex:1;display:flex;overflow:hidden;}
+
+/* ── SIDEBAR ── */
+#venom-sidebar{width:200px;background:var(--bg2);border-right:1px solid var(--border);display:flex;flex-direction:column;flex-shrink:0;}
+#venom-search{background:var(--bg3);border:none;border-bottom:1px solid var(--border);color:var(--w);padding:10px 12px;font-family:inherit;font-size:11px;width:100%;outline:none;}
+#venom-search::placeholder{color:#333;}
+#venom-convos{flex:1;overflow-y:auto;}
+.convo-item{padding:10px 12px;cursor:pointer;border-bottom:1px solid rgba(255,255,255,.03);transition:background .1s;position:relative;}
+.convo-item:hover{background:rgba(0,255,65,.04);}
+.convo-item.active{background:rgba(0,255,65,.08);border-left:2px solid var(--g);}
+.convo-name{font-size:11px;font-weight:900;color:var(--w);letter-spacing:.5px;}
+.convo-preview{font-size:10px;color:#444;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:160px;}
+.convo-ts{font-size:9px;color:#2a2a2a;position:absolute;top:10px;right:8px;}
+.unread-dot{width:6px;height:6px;background:var(--g);border-radius:50%;position:absolute;right:8px;bottom:10px;box-shadow:0 0 6px var(--g);}
+#new-dm-btn{padding:10px 12px;background:none;border:none;border-top:1px solid var(--border);color:#333;cursor:pointer;font-family:inherit;font-size:10px;letter-spacing:1px;text-align:left;width:100%;}
+#new-dm-btn:hover{color:var(--g);}
+
+/* ── CHAT AREA ── */
+#venom-chat{flex:1;display:flex;flex-direction:column;background:var(--bg);}
+#chat-header{background:var(--bg2);padding:8px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;flex-shrink:0;}
+#chat-user{font-size:12px;font-weight:900;color:var(--g);letter-spacing:1px;}
+#chat-online{width:6px;height:6px;background:#333;border-radius:50%;flex-shrink:0;}
+#chat-online.online{background:var(--g);box-shadow:0 0 6px var(--g);}
+#chat-btns{margin-left:auto;display:flex;gap:6px;}
+#messages{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:8px;}
+#messages::-webkit-scrollbar{width:2px;}
+#messages::-webkit-scrollbar-thumb{background:#1a1a1a;}
+
+.msg{display:flex;flex-direction:column;max-width:75%;}
+.msg.mine{align-self:flex-end;align-items:flex-end;}
+.msg.theirs{align-self:flex-start;align-items:flex-start;}
+.msg-bubble{padding:8px 12px;border-radius:6px;font-size:12px;line-height:1.5;word-break:break-word;position:relative;}
+.msg.mine .msg-bubble{background:rgba(0,255,65,.12);border:1px solid rgba(0,255,65,.2);color:var(--w);}
+.msg.theirs .msg-bubble{background:var(--bg3);border:1px solid var(--border);color:var(--w);}
+.msg-meta{font-size:9px;color:#333;margin-top:2px;letter-spacing:.5px;}
+.msg.mine .msg-meta{color:rgba(0,255,65,.3);}
+
+.msg-img{max-width:240px;max-height:180px;border-radius:4px;border:1px solid var(--border);cursor:pointer;}
+.msg-audio{width:200px;height:32px;filter:invert(1) hue-rotate(90deg);}
+.msg-file{display:flex;align-items:center;gap:8px;padding:6px 10px;background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:4px;font-size:11px;cursor:pointer;color:var(--b);}
+.msg-file:hover{border-color:var(--b);}
+
+.system-msg{font-size:10px;color:#333;text-align:center;letter-spacing:1px;padding:4px 0;}
+
+/* ── EMPTY STATE ── */
+#empty-state{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;color:#1a1a1a;}
+#empty-logo{font-size:48px;font-weight:900;color:#0d0d0d;text-shadow:0 0 40px rgba(0,255,65,.05);letter-spacing:8px;}
+
+/* ── INPUT ── */
+#chat-input-area{background:var(--bg2);border-top:1px solid var(--border);padding:10px 14px;display:flex;gap:8px;align-items:flex-end;flex-shrink:0;}
+#chat-attachments{display:flex;gap:6px;}
+.attach-btn{background:none;border:1px solid var(--border);color:#444;width:28px;height:28px;cursor:pointer;font-size:12px;border-radius:2px;transition:all .15s;display:flex;align-items:center;justify-content:center;}
+.attach-btn:hover{border-color:var(--g);color:var(--g);}
+#chat-input{flex:1;background:var(--bg3);border:1px solid var(--border);color:var(--w);padding:7px 10px;font-family:inherit;font-size:12px;outline:none;border-radius:2px;resize:none;max-height:100px;min-height:32px;}
+#chat-input:focus{border-color:rgba(0,255,65,.3);}
+#send-btn{background:rgba(0,255,65,.1);border:1px solid rgba(0,255,65,.3);color:var(--g);padding:7px 14px;cursor:pointer;font-family:inherit;font-size:11px;font-weight:900;letter-spacing:1px;border-radius:2px;transition:all .15s;}
+#send-btn:hover{background:rgba(0,255,65,.2);}
+
+/* CALL OVERLAY */
+#call-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.95);z-index:9999;flex-direction:column;align-items:center;justify-content:center;gap:20px;}
+#call-overlay.active{display:flex;}
+#call-overlay iframe{width:100%;height:calc(100% - 80px);border:none;}
+#call-controls{display:flex;gap:12px;}
+.call-btn{padding:10px 24px;border:none;font-family:inherit;font-size:11px;font-weight:900;letter-spacing:2px;cursor:pointer;border-radius:4px;}
+.call-btn.end{background:var(--r);color:#fff;}
+</style></head>
+<body>
+<div id="venom-hdr">
+  <div id="venom-logo">VENOM</div>
+  <div id="venom-status">ENCRYPTED · P2P · REALTIME</div>
+  <div id="venom-actions">
+    <button class="v-icon-btn" onclick="startGroupCall()">📞 GROUP CALL</button>
+    <button class="v-icon-btn danger" onclick="closeVenom()">✕ CLOSE</button>
+  </div>
+</div>
+<div id="venom-body">
+  <div id="venom-sidebar">
+    <input id="venom-search" placeholder="Search or start DM..." autocomplete="off">
+    <div id="venom-convos"></div>
+    <button id="new-dm-btn" onclick="promptNewDM()">+ NEW MESSAGE</button>
+  </div>
+  <div id="venom-chat">
+    <div id="empty-state">
+      <div id="empty-logo">☣</div>
+      <div style="font-size:11px;letter-spacing:2px;color:#1a1a1a;">SELECT A CONVERSATION</div>
+    </div>
+    <div id="active-chat" style="display:none;flex:1;flex-direction:column;">
+      <div id="chat-header">
+        <div id="chat-online"></div>
+        <div id="chat-user">—</div>
+        <div id="chat-btns">
+          <button class="v-icon-btn" onclick="startCall(currentDM)">📞 CALL</button>
+          <button class="v-icon-btn" onclick="startVideoCall(currentDM)">📹 VIDEO</button>
+        </div>
+      </div>
+      <div id="messages"></div>
+      <div id="chat-input-area">
+        <div id="chat-attachments">
+          <button class="attach-btn" title="Send image" onclick="attachFile('image')">🖼</button>
+          <button class="attach-btn" title="Send audio" onclick="attachFile('audio')">🎵</button>
+          <button class="attach-btn" title="Send file" onclick="attachFile('file')">📎</button>
+        </div>
+        <textarea id="chat-input" placeholder="Message..." rows="1"></textarea>
+        <button id="send-btn" onclick="sendMsg()">SEND</button>
+      </div>
+    </div>
+  </div>
+</div>
+<div id="call-overlay">
+  <iframe id="jitsi-frame" allow="camera; microphone; fullscreen; display-capture"></iframe>
+  <div id="call-controls">
+    <button class="call-btn end" onclick="endCall()">⬛ END CALL</button>
+  </div>
+</div>
+<input type="file" id="file-input" style="display:none">
+<script>
+const ME = window.VENOM_ME || 'ME';
+const ROOM = window.VENOM_ROOM || null;
+let currentDM = null;
+let conversations = {};
+let rtClient = null;
+let channels = {};
+
+// ── Init ──
+window.addEventListener('message', e => {
+  if (!e.data) return;
+  if (e.data.type === 'VENOM_INIT') {
+    rtClient = e.data.rtClient; // we get the sb2 ref via postMessage? No — we use our own
+    init(e.data.me, e.data.history, e.data.room);
+  }
+  if (e.data.type === 'VENOM_INCOMING') {
+    receiveMsg(e.data.from, e.data.msg);
+  }
+  if (e.data.type === 'VENOM_PRESENCE') {
+    updatePresence(e.data.user, e.data.online);
+  }
+});
+
+function init(me, history, room) {
+  window.ME = me;
+  conversations = history || {};
+  renderConvos();
+  setupSearch();
+  if (room) openGroupChat(room);
+}
+
+function renderConvos() {
+  const el = document.getElementById('venom-convos');
+  el.innerHTML = '';
+  const sorted = Object.entries(conversations).sort((a,b) => {
+    const la = a[1].slice(-1)[0]?.ts || 0;
+    const lb = b[1].slice(-1)[0]?.ts || 0;
+    return lb - la;
+  });
+  if (!sorted.length) {
+    el.innerHTML = '<div style="padding:16px;font-size:10px;color:#222;text-align:center;letter-spacing:1px;">NO CONVERSATIONS YET</div>';
+    return;
+  }
+  sorted.forEach(([user, msgs]) => {
+    const last = msgs[msgs.length - 1];
+    const preview = last ? (last.type === 'image' ? '[IMAGE]' : last.type === 'audio' ? '[AUDIO]' : last.type === 'file' ? '[FILE: '+last.name+']' : (last.text||'').slice(0,40)) : '';
+    const d = document.createElement('div');
+    d.className = 'convo-item' + (user === currentDM ? ' active' : '');
+    d.innerHTML = '<div class="convo-name">'+escH(user)+'</div><div class="convo-preview">'+escH(preview)+'</div><div class="convo-ts">'+(last ? relTime(last.ts) : '')+'</div>';
+    d.onclick = () => openDM(user);
+    el.appendChild(d);
+  });
+}
+
+function openDM(user) {
+  currentDM = user;
+  document.getElementById('empty-state').style.display = 'none';
+  const ac = document.getElementById('active-chat');
+  ac.style.display = 'flex';
+  ac.style.flexDirection = 'column';
+  document.getElementById('chat-user').textContent = user.toUpperCase();
+  document.querySelectorAll('.convo-item').forEach(el => el.classList.toggle('active', el.querySelector('.convo-name')?.textContent === user.toUpperCase()));
+  renderMessages(user);
+  document.getElementById('chat-input').focus();
+  // notify parent to sub to this DM channel
+  window.parent.postMessage({ type: 'VENOM_OPEN_DM', target: user }, '*');
+}
+
+function renderMessages(user) {
+  const msgs = conversations[user] || [];
+  const el = document.getElementById('messages');
+  el.innerHTML = '';
+  msgs.forEach(m => appendMsgEl(m));
+  el.scrollTop = el.scrollHeight;
+}
+
+function appendMsgEl(m) {
+  const el = document.getElementById('messages');
+  if (m.type === 'system') {
+    const d = document.createElement('div');
+    d.className = 'system-msg';
+    d.textContent = m.text;
+    el.appendChild(d);
+  } else {
+    const isMine = m.from === ME;
+    const d = document.createElement('div');
+    d.className = 'msg ' + (isMine ? 'mine' : 'theirs');
+    let inner = '';
+    if (m.type === 'image') inner = '<img class="msg-img" src="'+m.url+'" onclick="window.open(\''+m.url+'\',\'_blank\')">';
+    else if (m.type === 'audio') inner = '<audio class="msg-audio" controls src="'+m.url+'"></audio>';
+    else if (m.type === 'file') inner = '<div class="msg-file" onclick="window.open(\''+m.url+'\',\'_blank\')">📎 '+escH(m.name||'file')+'</div>';
+    else inner = escH(m.text||'');
+    d.innerHTML = '<div class="msg-bubble">'+inner+'</div><div class="msg-meta">'+(isMine?'YOU':escH(m.from))+' · '+relTime(m.ts)+'</div>';
+    el.appendChild(d);
+  }
+  el.scrollTop = el.scrollHeight;
+}
+
+function receiveMsg(from, msg) {
+  if (!conversations[from]) conversations[from] = [];
+  conversations[from].push(msg);
+  if (currentDM === from) appendMsgEl(msg);
+  renderConvos();
+  // flash notification
+  if (currentDM !== from) {
+    const existing = document.querySelector('.convo-item .convo-name');
+    // add unread dot
+  }
+  window.parent.postMessage({ type: 'VENOM_SAVE', user: from, msgs: conversations[from] }, '*');
+}
+
+function sendMsg() {
+  const inp = document.getElementById('chat-input');
+  const text = inp.value.trim();
+  if (!text || !currentDM) return;
+  inp.value = '';
+  const msg = { from: ME, to: currentDM, type: 'text', text, ts: Date.now() };
+  if (!conversations[currentDM]) conversations[currentDM] = [];
+  conversations[currentDM].push(msg);
+  appendMsgEl(msg);
+  renderConvos();
+  window.parent.postMessage({ type: 'VENOM_SEND', to: currentDM, msg }, '*');
+}
+
+function attachFile(type) {
+  const fi = document.getElementById('file-input');
+  fi.accept = type === 'image' ? 'image/*' : type === 'audio' ? 'audio/*' : '*/*';
+  fi._type = type;
+  fi.click();
+}
+document.getElementById('file-input').addEventListener('change', async function() {
+  const file = this.files[0];
+  if (!file || !currentDM) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const url = e.target.result; // base64 data URL
+    const msg = { from: ME, to: currentDM, type: this._type || 'file', url, name: file.name, ts: Date.now() };
+    if (!conversations[currentDM]) conversations[currentDM] = [];
+    conversations[currentDM].push(msg);
+    appendMsgEl(msg);
+    renderConvos();
+    window.parent.postMessage({ type: 'VENOM_SEND', to: currentDM, msg }, '*');
+  };
+  reader.readAsDataURL(file);
+  this.value = '';
+});
+
+// Enter to send
+document.getElementById('chat-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMsg(); }
+});
+
+// Auto-resize textarea
+document.getElementById('chat-input').addEventListener('input', function() {
+  this.style.height = 'auto';
+  this.style.height = Math.min(this.scrollHeight, 100) + 'px';
+});
+
+function promptNewDM() {
+  const user = prompt('Start DM with (username):');
+  if (user && user.trim()) {
+    if (!conversations[user.trim().toLowerCase()]) conversations[user.trim().toLowerCase()] = [];
+    openDM(user.trim().toLowerCase());
+    renderConvos();
+  }
+}
+
+function openGroupChat(room) {
+  openDM('#' + room);
+}
+
+function setupSearch() {
+  document.getElementById('venom-search').addEventListener('input', function() {
+    const q = this.value.toLowerCase();
+    document.querySelectorAll('.convo-item').forEach(el => {
+      const name = el.querySelector('.convo-name')?.textContent?.toLowerCase() || '';
+      el.style.display = name.includes(q) ? '' : 'none';
+    });
+  });
+}
+
+function updatePresence(user, online) {
+  if (user === currentDM) {
+    const dot = document.getElementById('chat-online');
+    dot.className = 'online' + (online ? ' online' : '');
+  }
+}
+
+// ── CALLS via Jitsi ──
+function startCall(user) {
+  openJitsi('audio_' + Date.now(), false);
+  window.parent.postMessage({ type: 'VENOM_CALL', to: user, mode: 'audio' }, '*');
+}
+function startVideoCall(user) {
+  openJitsi('video_' + Date.now(), true);
+  window.parent.postMessage({ type: 'VENOM_CALL', to: user, mode: 'video' }, '*');
+}
+function startGroupCall() {
+  openJitsi('group_' + (ROOM || 'dreamcore') + '_' + Date.now().toString(36), true);
+}
+function openJitsi(roomName, video) {
+  const overlay = document.getElementById('call-overlay');
+  const frame = document.getElementById('jitsi-frame');
+  frame.src = 'https://meet.jit.si/' + roomName + '#config.startWithAudioMuted=' + !video + '&config.startWithVideoMuted=' + !video + '&userInfo.displayName=' + encodeURIComponent(window.ME || 'User');
+  overlay.classList.add('active');
+}
+function endCall() {
+  document.getElementById('call-overlay').classList.remove('active');
+  document.getElementById('jitsi-frame').src = '';
+}
+function closeVenom() {
+  window.parent.postMessage({ type: 'VENOM_CLOSE' }, '*');
+}
+
+// Helpers
+function escH(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function relTime(ts) {
+  if (!ts) return '';
+  const diff = Date.now() - ts;
+  if (diff < 60000) return 'just now';
+  if (diff < 3600000) return Math.floor(diff/60000) + 'm ago';
+  if (diff < 86400000) return Math.floor(diff/3600000) + 'h ago';
+  return new Date(ts).toLocaleDateString();
+}
+<\/script></body></html>`;
+
+  // Open as a full window
+  const { body, id: winId } = mkWin({ title: '☣ VENOM', w: 1000, h: 680, type: 'html' });
+  const iframe = document.createElement('iframe');
+  iframe.style.cssText = 'width:100%;height:100%;border:none;';
+  iframe.srcdoc = VENOM_HTML;
+  iframe.sandbox = 'allow-scripts allow-same-origin allow-popups allow-forms';
+  body.appendChild(iframe);
+
+  // Wait for iframe to load then init
+  iframe.addEventListener('load', () => {
+    // Load all conversation histories
+    const histPromises = Object.keys(_venomConvos).map(async user => {
+      const msgs = await venomLoadHistory(user);
+      _venomConvos[user] = msgs;
+    });
+    Promise.all(histPromises).then(() => {
+      iframe.contentWindow?.postMessage({
+        type: 'VENOM_INIT',
+        me: S.user,
+        history: _venomConvos,
+        room: S.currentRoom || null
+      }, '*');
+      if (initialDM) {
+        setTimeout(() => {
+          iframe.contentWindow?.postMessage({ type: 'VENOM_INIT_DM', target: initialDM }, '*');
+        }, 300);
+      }
+    });
+  });
+
+  // Subscribe to DM channel for this user
+  function subscribeVenomDM(targetUser) {
+    const dmKey = [S.user.toLowerCase(), targetUser.toLowerCase()].sort().join('_');
+    if (channels['venom_' + dmKey]) return; // already subscribed
+    const ch = window._sb2.channel('venom:' + dmKey);
+    channels['venom_' + dmKey] = ch;
+    ch.on('broadcast', { event: 'dm' }, ({ payload }) => {
+      if (payload.from === S.user) return;
+      // Deliver to iframe
+      iframe.contentWindow?.postMessage({ type: 'VENOM_INCOMING', from: payload.from, msg: payload.msg }, '*');
+      // Store
+      if (!_venomConvos[payload.from]) _venomConvos[payload.from] = [];
+      _venomConvos[payload.from].push(payload.msg);
+      venomSaveHistory(payload.from, _venomConvos[payload.from]);
+      // notify if venom window not focused
+      notify(`☣ ${esc(payload.from)}: ${esc((payload.msg.text||'[media]').slice(0,40))}`, 'ai-notif', 5000);
+    }).subscribe();
+  }
+
+  // Subscribe to call invite channel
+  const callCh = window._sb2.channel('venom:calls:' + S.user.toLowerCase());
+  callCh.on('broadcast', { event: 'call_invite' }, ({ payload }) => {
+    const nid = 'call_' + Date.now();
+    const d = document.createElement('div');
+    d.className = 'notif ai-notif';
+    d.id = nid;
+    d.style.cssText = 'pointer-events:all;min-width:200px;';
+    d.innerHTML = `<div style="font-weight:900;margin-bottom:6px;color:#00FF41;">📞 INCOMING CALL</div>
+      <div style="color:#aaa;font-size:11px;margin-bottom:8px;">${esc(payload.from)} is calling you (${payload.mode})</div>
+      <div style="display:flex;gap:8px;">
+        <button onclick="acceptCall('${esc(payload.room)}');document.getElementById('${nid}').remove();" style="background:#00FF41;color:#000;border:none;padding:4px 10px;font-family:inherit;font-size:10px;font-weight:900;cursor:pointer;border-radius:2px;">ANSWER</button>
+        <button onclick="document.getElementById('${nid}').remove()" style="background:#FF2020;color:#fff;border:none;padding:4px 10px;font-family:inherit;font-size:10px;font-weight:900;cursor:pointer;border-radius:2px;">DECLINE</button>
+      </div>`;
+    document.getElementById('notif-stack').appendChild(d);
+  }).subscribe();
+
+  window._venomCallAccept = function(room) {
+    // Re-open venom with the call room
+    openVenom(null);
+    setTimeout(() => {
+      const fr = document.querySelector('#wm .win iframe[srcdoc*="VENOM"]');
+      if (fr) {
+        fr.contentWindow?.postMessage({ type: 'VENOM_ACCEPT_CALL', room }, '*');
+      }
+    }, 500);
+  };
+
+  // Listen for messages back from the iframe
+  const msgHandler = async (e) => {
+    if (!e.data) return;
+
+    if (e.data.type === 'VENOM_OPEN_DM') {
+      subscribeVenomDM(e.data.target);
+      // Also load history if not loaded
+      if (!_venomConvos[e.data.target]) {
+        const msgs = await venomLoadHistory(e.data.target);
+        _venomConvos[e.data.target] = msgs;
+        iframe.contentWindow?.postMessage({ type: 'VENOM_HISTORY', user: e.data.target, msgs }, '*');
+      }
+    }
+
+    if (e.data.type === 'VENOM_SEND') {
+      const { to, msg } = e.data;
+      if (!_venomConvos[to]) _venomConvos[to] = [];
+      _venomConvos[to].push(msg);
+      venomSaveHistory(to, _venomConvos[to]);
+      // Send via Realtime
+      const dmKey = [S.user.toLowerCase(), to.toLowerCase()].sort().join('_');
+      subscribeVenomDM(to);
+      window._sb2?.channel('venom:' + dmKey).send({
+        type: 'broadcast', event: 'dm',
+        payload: { from: S.user, to, msg }
+      });
+    }
+
+    if (e.data.type === 'VENOM_SAVE') {
+      _venomConvos[e.data.user] = e.data.msgs;
+      venomSaveHistory(e.data.user, e.data.msgs);
+    }
+
+    if (e.data.type === 'VENOM_CALL') {
+      const { to, mode } = e.data;
+      const callRoom = 'dc_' + [S.user.toLowerCase(), to.toLowerCase()].sort().join('_') + '_' + Date.now().toString(36);
+      // Notify recipient
+      window._sb2?.channel('venom:calls:' + to.toLowerCase()).send({
+        type: 'broadcast', event: 'call_invite',
+        payload: { from: S.user, mode, room: callRoom }
+      });
+    }
+
+    if (e.data.type === 'VENOM_CLOSE') {
+      window.removeEventListener('message', msgHandler);
+      closeLastWin();
+    }
+  };
+  window.addEventListener('message', msgHandler);
+
+  log('☣ VENOM MESSENGER OPEN', 'ok');
+  if (initialDM) log(`Opening DM with <span style="color:#00FF41;font-weight:900;">${esc(initialDM)}</span>`, 'inf');
+}
+
+function showCallNotif(from, mode, room) {
+  const nid = 'call_' + Date.now();
+  const d = document.createElement('div');
+  d.className = 'notif ai-notif';
+  d.id = nid;
+  d.style.cssText = 'pointer-events:all;min-width:200px;';
+  const answerBtn = document.createElement('button');
+  answerBtn.textContent = 'ANSWER';
+  answerBtn.style.cssText = 'background:#00FF41;color:#000;border:none;padding:4px 10px;font-family:inherit;font-size:10px;font-weight:900;cursor:pointer;border-radius:2px;margin-right:8px;';
+  answerBtn.onclick = () => { acceptCall(room); d.remove(); };
+  const declineBtn = document.createElement('button');
+  declineBtn.textContent = 'DECLINE';
+  declineBtn.style.cssText = 'background:#FF2020;color:#fff;border:none;padding:4px 10px;font-family:inherit;font-size:10px;font-weight:900;cursor:pointer;border-radius:2px;';
+  declineBtn.onclick = () => d.remove();
+  const header = document.createElement('div');
+  header.style.cssText = 'font-weight:900;margin-bottom:6px;color:#00FF41;';
+  header.textContent = '📞 INCOMING CALL';
+  const info = document.createElement('div');
+  info.style.cssText = 'color:#aaa;font-size:11px;margin-bottom:8px;';
+  info.textContent = esc(from) + ' is calling (' + (mode||'audio') + ')';
+  const btns = document.createElement('div');
+  btns.style.display = 'flex';
+  btns.appendChild(answerBtn);
+  btns.appendChild(declineBtn);
+  d.appendChild(header);
+  d.appendChild(info);
+  d.appendChild(btns);
+  document.getElementById('notif-stack').appendChild(d);
+  setTimeout(() => d.remove(), 30000);
+}
+
+function acceptCall(room) {
+  openVenom(null);
+  setTimeout(() => {
+    window._venomCallAccept?.(room);
+  }, 600);
+}
+
 /* KEYBOARD */
 $ci.addEventListener('keydown',async e=>{
   if(e.key==='Enter'){const v=$ci.value;$ci.value='';await exec(v);}
   if(e.key==='ArrowUp'){e.preventDefault();if(S.cmdIdx<S.cmdHist.length-1)$ci.value=S.cmdHist[++S.cmdIdx]||'';}
   if(e.key==='ArrowDown'){e.preventDefault();S.cmdIdx>0?$ci.value=S.cmdHist[--S.cmdIdx]:($ci.value='',S.cmdIdx=-1);}
   if(e.key==='Tab'){e.preventDefault();const userAliases=Object.keys(S.aliases||{});
-    const C=['--help','--reach ','--end','--endx','--list','.disk -list','--encrypt -usr','--encrypt -usr -reset','--usr .','make game ','make ascii ','--alias set ','--alias list','--alias remove ','--saves','--save ','--load ','--pub =library ','--library','--library run ','--library remove ','--profile','--profile edit ','--theme ','--memory','--memory add ','--store','--store install ','--run ','--room ','--room leave','--room invite ','--room who','/say ','--game ','--game join ','--game invite ','--game list','make multiplayer game ','make solo game ',...userAliases];const m=C.find(c=>c.startsWith($ci.value)&&c!==$ci.value);if(m)$ci.value=m;}
+    const C=['--help','--reach ','--end','--endx','--list','.disk -list','--encrypt -usr','--encrypt -usr -reset','--usr .','make game ','make ascii ','--alias set ','--alias list','--alias remove ','--saves','--save ','--load ','--pub =library ','--library','--library run ','--library remove ','--profile','--profile edit ','--theme ','--memory','--memory add ','--store','--store install ','--run ','--room ','--room leave','--room invite ','--room who','/say ','--game ','--game join ','--game invite ','--game list','make multiplayer game ','make solo game ','--venom','--venom ',...userAliases];const m=C.find(c=>c.startsWith($ci.value)&&c!==$ci.value);if(m)$ci.value=m;}
 });
 document.addEventListener('click',e=>{if(!e.target.closest('.win')&&!e.target.classList.contains('wb'))$ci.focus();});
 
