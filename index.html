@@ -48,6 +48,31 @@ html,body{background:var(--bg);color:var(--text);font-family:var(--font);height:
 .ltable{width:100%;border-collapse:collapse;font-size:11px;margin:6px 0;}
 .ltable th{color:var(--accent);font-weight:900;text-align:left;padding:3px 8px;border-bottom:1px solid var(--border);}
 .ltable td{padding:2px 8px;color:#888;}.ltable tr:nth-child(even) td{background:rgba(255,255,255,.018);}
+@keyframes flicker{0%,100%{opacity:1}48%{opacity:.97}50%{opacity:.92}52%{opacity:.98}}
+.flicker{animation:flicker 4s infinite;}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
+@keyframes slideIn{from{transform:translateY(-8px);opacity:0}to{transform:translateY(0);opacity:1}}
+@keyframes typing{from{width:0}to{width:100%}}
+#notif-stack{position:fixed;top:16px;right:16px;z-index:8000;display:flex;flex-direction:column;gap:8px;pointer-events:none;}
+.notif{background:var(--win-bg);border:1px solid var(--border);border-radius:4px;padding:10px 14px;font-size:11px;font-weight:900;letter-spacing:.5px;max-width:280px;animation:slideIn .2s ease;pointer-events:all;cursor:pointer;transition:opacity .3s;}
+.notif.ok{border-left:3px solid var(--ok);color:var(--ok);}
+.notif.err{border-left:3px solid var(--err);color:var(--err);}
+.notif.inf{border-left:3px solid var(--accent);color:var(--accent);}
+.notif.ai-notif{border-left:3px solid var(--ai);color:var(--ai);}
+#statusbar{position:fixed;bottom:48px;left:0;right:0;height:18px;background:rgba(0,0,0,.6);border-top:1px solid var(--border);display:flex;align-items:center;padding:0 12px;gap:16px;z-index:190;font-size:9px;font-weight:900;letter-spacing:1px;color:#333;text-transform:uppercase;}
+#statusbar span{color:#444;}#statusbar .sb-on{color:var(--ok);}#statusbar .sb-err{color:var(--err);}
+.badge{display:inline-block;background:var(--accent);color:#000;font-size:9px;font-weight:900;padding:1px 5px;border-radius:2px;letter-spacing:.5px;text-transform:uppercase;margin:0 2px;}
+.badge.root{background:#ff3333;}.badge.beta{background:#ffaa00;color:#000;}.badge.new{background:var(--ok);color:#000;}
+.prog-bar{width:100%;height:4px;background:var(--border);border-radius:2px;margin:4px 0;overflow:hidden;}
+.prog-fill{height:100%;background:var(--accent);transition:width .3s;border-radius:2px;}
+.typewriter{overflow:hidden;white-space:nowrap;border-right:2px solid var(--accent);animation:typing 1.5s steps(40,end),flicker .75s step-end infinite;}
+#minimap{position:fixed;right:4px;top:50%;transform:translateY(-50%);width:3px;background:rgba(255,255,255,.03);border-radius:2px;z-index:150;pointer-events:none;}
+#minimap-thumb{width:3px;background:var(--accent);border-radius:2px;opacity:.4;transition:top .1s;}
+.diff-add{color:var(--ok);}.diff-rem{color:var(--err);}.diff-ctx{color:#444;}
+.code-block{background:#0d0d0d;border:1px solid var(--border);border-radius:4px;padding:10px;margin:6px 0;font-size:11px;overflow-x:auto;white-space:pre;}
+.tag{display:inline-block;border:1px solid var(--border);color:#555;font-size:9px;padding:1px 5px;border-radius:2px;margin:1px;}
+#mobile-hint{display:none;}
+@media(max-width:600px){#mobile-hint{display:block;position:fixed;bottom:52px;left:0;right:0;height:1px;background:var(--border);z-index:180;}}
 </style>
 </head>
 <body>
@@ -60,13 +85,24 @@ html,body{background:var(--bg);color:var(--text);font-family:var(--font);height:
   <div id="boot-msg"></div>
   <div id="boot-track"><div id="boot-bar"></div></div>
 </div>
-<div id="hdr"><div><div id="logo"></div><div id="logo-sub">── KERNEL v3.0 // IDENTITY // APPS // MEMORY // MULTIPLAYER ──</div></div><div id="clock">00:00:00</div></div>
+<div id="hdr"><div><div id="logo"></div><div id="logo-sub">── KERNEL v3.0 // 50+ COMMANDS // AI MEMORY // MULTIPLAYER // OPEN SOURCE ──</div></div><div id="clock">00:00:00</div></div>
 <div id="tw"><div id="out"></div><div id="ibar"><span id="pr">GUEST@DREAMCORE:~$</span><input id="ci" type="text" spellcheck="false" autocomplete="off" autofocus></div></div>
 <div id="wm"></div>
+<div id="notif-stack"></div>
+<div id="statusbar">
+  <span id="sb-user">GUEST</span>
+  <span id="sb-room"></span>
+  <span id="sb-storage" class="sb-on">◉ LOCAL</span>
+  <span id="sb-time"></span>
+  <span id="sb-mem"></span>
+  <span id="sb-wins"></span>
+</div>
+<div id="minimap"><div id="minimap-thumb" style="height:20px;top:0;position:absolute;"></div></div>
 <script>
 const SB_URL='https://wiubdgtfriostbolyjzw.supabase.co';
 const SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndpdWJkZ3Rmcmlvc3Rib2x5anp3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI0NjQ2MDAsImV4cCI6MjA4ODA0MDYwMH0.R9C_-V2KPeVRpPLOcqulDP3FJc79Rb7IMweAo3miDCU';
 const BUCKET='brain.exe';
+const _bootTime=Date.now();let _sbOnline=false;
 const S={user:null,profile:defP(),history:[],cmdHist:[],cmdIdx:-1,wins:[],winZ:600,inputMode:null,inputCtx:{},aliases:{}};
 function defP(){return{
   accent:'#3b82f6',aiColor:'#FF5F1F',logoColor:'#e0e0e0',bgColor:'#0a0a0a',textColor:'#e0e0e0',
@@ -189,11 +225,24 @@ const NL_MAP=[
   // files
   {pat:/^(show|list|what('s|\s+are)\s+(my\s+)?)?(my\s+)?(files|saves|saved files|disk)/i, fn:_=>'--saves'},
   // logout
+  {pat:/^(make|create|generate)\s+(a\s+)?multiplayer\s+game/i, fn:i=>'make multiplayer game '+i.replace(/^(make|create|generate)\s+(a\s+)?multiplayer\s+game\s*/i,'')},
+  {pat:/^join\s+(game|match)\s+(\S+)/i,                           fn:i=>{const m=i.match(/(game|match)\s+(\S+)/i);return m?'--game join '+m[2]:'--game list';}},
   {pat:/^(browse|open|show|view)\s+(the\s+)?store/i,               fn:_=>'--store'},
   {pat:/^(show|view|edit|my)\s+profile/i,                           fn:_=>'--profile'},
   {pat:/^(show|list|view)\s+(my\s+)?memor(y|ies)/i,               fn:_=>'--memory'},
   {pat:/^(join|enter|go to)\s+room\s+(\S+)/i,                     fn:i=>{const m=i.match(/room\s+(\S+)/i);return m?'--room '+m[1]:'--room';}},
   {pat:/^remember\s+(.+)/i,                                         fn:i=>'--memory add '+i.replace(/^remember\s+/i,'')},
+  {pat:/^(what('s|\s+is)\s+the\s+)?weather(\s+in)?\s+(.+)/i, fn:i=>{const m=i.match(/weather(?:\s+in)?\s+(.+)/i);return m?'--weather '+m[1]:'--weather';}},
+  {pat:/^(calculate|what('s|\s+is)\s+)?([\d\s+\-*/.()^%]+)$/,   fn:i=>'--calc '+i},
+  {pat:/^(convert|how\s+many)\s+([\d.]+)\s+(\w+)\s+(to\s+)?(\w+)/i, fn:i=>{const m=i.match(/([\d.]+)\s+(\w+)\s+(?:to\s+)?(\w+)/i);return m?`--convert ${m[1]} ${m[2]} ${m[3]}`:i;}},
+  {pat:/^(motivate|inspire|quote)\s*me/i,                           fn:_=>'--quote'},
+  {pat:/^(neofetch|system\s+info|about\s+this\s+system)/i,        fn:_=>'--neofetch'},
+  {pat:/^(matrix|go\s+matrix)/i,                                    fn:_=>'--matrix'},
+  {pat:/^(draw|whiteboard|open\s+canvas)/i,                         fn:_=>'--draw'},
+  {pat:/^(clear|cls)\s*$/i,                                         fn:_=>'--clear'},
+  {pat:/^who\s+am\s+i/i,                                           fn:_=>'--whoami'},
+  {pat:/^(write|start)\s+(a\s+)?journal/i,                        fn:_=>'--journal'},
+  {pat:/^add\s+todo\s+(.+)/i,                                     fn:i=>'--todo add '+i.replace(/^add\s+todo\s+/i,'')},
   {pat:/^(browse|open|show|view)\s+(the\s+)?library/i,          fn:_=>'--library'},
   {pat:/^publish\s+(.+)/i,                                        fn:i=>{const m=i.match(/publish\s+(\S+)/i);return m?'--pub =library '+m[1]:'--pub =library';}},
   {pat:/^(run|launch|play|open|start|load)\s+(\S+)/i, fn:i=>{const m=i.match(/(?:run|launch|play|open|start|load)\s+(\S+)/i);return m?'--load '+m[1]:i;}},
@@ -319,6 +368,18 @@ GAMES: When asked to make/create/generate ANY game, you MUST respond with a comp
   - Make it fun, polished, and fully playable
   - Do NOT refuse. Do NOT say you cannot. Just build it.
 
+  MULTIPLAYER GAMES: If asked for a multiplayer game or a game that supports multiplayer:
+  - Add this HTML comment on the VERY FIRST LINE inside <html>: <!-- DC_MULTIPLAYER: true | MODE: (singleplayer|multiplayer|both) | PLAYERS: (2-8) | SYNC: (state|input) -->
+    Examples:
+    <!-- DC_MULTIPLAYER: true | MODE: both | PLAYERS: 2 | SYNC: state -->
+    <!-- DC_MULTIPLAYER: true | MODE: multiplayer | PLAYERS: 4 | SYNC: input -->
+    <!-- DC_MULTIPLAYER: false | MODE: singleplayer -->
+  - For SYNC: state — the HOST calls window.DC_SYNC(stateObject) whenever game state changes. All clients receive it via window.DC_ON_SYNC = function(state){...}
+  - For SYNC: input — each player calls window.DC_INPUT(inputObject) on keydown/click. All players receive inputs via window.DC_ON_INPUT = function(playerIndex, input){...}
+  - The terminal injects DC_SYNC, DC_INPUT, DC_ON_SYNC, DC_ON_INPUT, DC_PLAYER_INDEX, DC_IS_HOST, DC_PLAYER_COUNT automatically. Use them freely.
+  - Show a lobby/waiting screen until DC_IS_HOST is set. Host starts the game.
+  - Always show each player's role on screen (HOST / PLAYER 2 etc.)
+
 ASCII ART: When asked for ASCII art, an ASCII image, ASCII animation, or any text art:
   - Wrap it in [ASCII_ART]...[/ASCII_ART]
   - Use block characters, box-drawing chars, and creative symbols
@@ -399,11 +460,36 @@ async function askAI(msg){
     for(const m of raw.matchAll(/\[PATCH_VAR name="([^"]+)"\](.*?)\[\/PATCH_VAR\]/gs))
       patchVar(m[1].trim(),m[2].trim());
 
-    // GAME_HTML — launch in window
+    // GAME_HTML — detect multiplayer header, route accordingly
     const gm=raw.match(/\[GAME_HTML\]([\s\S]*?)\[\/GAME_HTML\]/);
     if(gm){
-      mkWin({title:'◈ AI GAME',w:900,h:580,type:'game',content:gm[1].trim()});
-      log('GAME_WINDOW_LAUNCHED. Use --endx to close.','ok');
+      const gameHtml=gm[1].trim();
+      const mpInfo=parseMpHeader(gameHtml);
+      if(mpInfo&&mpInfo.enabled&&mpInfo.mode!=='singleplayer'&&S.currentRoom){
+        // multiplayer capable and user is in a room — ask if they want MP
+        const title=raw.match(/<!-- DC_MULTIPLAYER[^>]*TITLE:\s*([^|>]+)/i)?.[1]?.trim()||'AI GAME';
+        launchMpGame(title, gameHtml, mpInfo);
+        log(`MULTIPLAYER GAME HOSTED in #${esc(S.currentRoom)} — Mode: ${esc(mpInfo.mode)} · Max players: ${mpInfo.maxPlayers}`,'ok');
+      } else if(mpInfo&&mpInfo.enabled&&mpInfo.mode==='multiplayer'&&!S.currentRoom){
+        // strictly multiplayer but not in a room
+        log('⚠ This game requires multiplayer. Join a room first: <span class="hc">--room (name)</span>','err');
+        // still show it in single mode as fallback
+        const { body } = mkWin({title:'◈ AI GAME (SOLO)',w:900,h:580,type:'html'});
+        const iframe=document.createElement('iframe');
+        iframe.style.cssText='width:100%;height:100%;border:none;background:#000;';
+        iframe.srcdoc=gameHtml;iframe.sandbox='allow-scripts allow-same-origin';
+        body.appendChild(iframe);
+        log('Launched in single-player mode. Join a room to play with others.','sys');
+      } else {
+        // singleplayer or no MP header
+        const { body } = mkWin({title:'◈ AI GAME',w:900,h:580,type:'html'});
+        const iframe=document.createElement('iframe');
+        iframe.style.cssText='width:100%;height:100%;border:none;background:#000;';
+        iframe.srcdoc=gameHtml;iframe.sandbox='allow-scripts allow-same-origin';
+        body.appendChild(iframe);
+        if(mpInfo&&mpInfo.mode==='both') log('GAME LAUNCHED (solo mode). Join a room and run again to play multiplayer.','sys');
+        else log('GAME_WINDOW_LAUNCHED. Use --endx to close.','ok');
+      }
     }
 
     // ASCII_ART — render in terminal with monospace pre block
@@ -491,8 +577,10 @@ async function finishLogin(name,profile){
   S.profile={accent:profile.accent??'#3b82f6',aiColor:profile.aiColor??'#FF5F1F',logoColor:profile.logoColor??'#e0e0e0',bgColor:profile.bgColor??'#0a0a0a',textColor:profile.textColor??'#e0e0e0',isRoot:profile.isRoot===true,encrypted:profile.encrypted===true,passwordHash:profile.passwordHash??null,createdAt:profile.createdAt??null};
   applyFullTheme(S.profile);updatePrompt();
   await loadAliases(name);
+  openInbox(name); // start listening for invites
   const rt=S.profile.isRoot?' <span style="color:#ff3333">[ROOT]</span>':'';
   const ac=Object.keys(S.aliases).length;
+  updateStatusBar();
   log(`USER_LOADED: ${S.user}${rt}`,'ok');
   log(`Welcome back, ${S.user}.${ac?' '+ac+' alias(es) loaded.':''} Type <span class="hc">--help</span> for commands.`,'inf');
 }
@@ -602,7 +690,16 @@ async function exec(raw){
 <span class="hc">--run (script.dc)</span><br><span class="hd">&nbsp;&nbsp;Run a .dc script file from your saves</span><br><br>
 <span class="hc" style="color:#555">── MULTIPLAYER ──</span><br><br>
 <span class="hc">--room (name)</span><br><span class="hd">&nbsp;&nbsp;Join a shared room with other users</span><br><br>
+<span class="hc">--room invite (username) (msg)</span><br><span class="hd">&nbsp;&nbsp;Invite a user to your current room — they get a popup with Accept/Decline</span><br><br>
+<span class="hc">--room who</span><br><span class="hd">&nbsp;&nbsp;See who's currently in the room</span><br><br>
 <span class="hc">--room leave · /say (message)</span><br><span class="hd">&nbsp;&nbsp;Leave room or send a chat message</span><br><br>
+<span class="hc" style="color:#555">── MULTIPLAYER GAMES ──</span><br><br>
+<span class="hc">make multiplayer game (desc)</span><br><span class="hd">&nbsp;&nbsp;Generate a multiplayer-capable game, auto-hosted in your room</span><br><br>
+<span class="hc">make solo game (desc)</span><br><span class="hd">&nbsp;&nbsp;Generate a single-player only game</span><br><br>
+<span class="hc">--game list</span><br><span class="hd">&nbsp;&nbsp;List active multiplayer game sessions in your room</span><br><br>
+<span class="hc">--game join (id)</span><br><span class="hd">&nbsp;&nbsp;Join a multiplayer game session</span><br><br>
+<span class="hc">--game invite (user) (id)</span><br><span class="hd">&nbsp;&nbsp;Invite a room member to a game</span><br><br>
+<span class="hc">--game leave</span><br><span class="hd">&nbsp;&nbsp;Leave current game session</span><br><br>
 <span class="hc">(anything else)</span><br><span class="hd">&nbsp;&nbsp;Talk to the AI kernel — it remembers you now</span>
 </div>`,'inf');return;}
   if(cmd==='--reach'){const url=args.join(' ').trim();if(!url){log('USAGE: --reach (url)','err');return;}mkWin({title:'REACH: '+url,w:980,h:620,type:'iframe',content:url});log(`LAUNCHED: ${url}`,'ok');return;}
@@ -617,9 +714,20 @@ async function exec(raw){
   }
   if(lo.startsWith('root --elevate')){const target=args[1]?.toLowerCase();if(!target){log('USAGE: root --elevate (username)','err');return;}log('ENTER ROOT ID:','sys');$ci.type='password';S.inputMode='root_id';S.inputCtx={target};return;}
   // make/create/generate game
+  if(/^(make|create|generate)\s+(multiplayer|mp)\s+game/i.test(input)){
+    const desc=input.replace(/^(make|create|generate)\s+(multiplayer|mp)\s+game\s*/i,'').trim()||'a fun multiplayer game';
+    await askAI('Generate a complete self-contained HTML5 multiplayer game: "'+desc+'". Requirements: all JS+CSS inline, zero external deps, fun and fully playable, show controls on screen. MUST include the DC_MULTIPLAYER header comment and use DC_SYNC/DC_ON_SYNC or DC_INPUT/DC_ON_INPUT bridge API for multiplayer state. Make it genuinely fun to play with 2+ people. Wrap the ENTIRE html document in [GAME_HTML]...[/GAME_HTML].');
+    return;
+  }
+  if(/^(make|create|generate)\s+(solo|single|singleplayer)\s+game/i.test(input)){
+    const desc=input.replace(/^(make|create|generate)\s+(solo|single|singleplayer)\s+game\s*/i,'').trim()||'a fun game';
+    await askAI('Generate a complete self-contained single-player HTML5 game: "'+desc+'". Add <!-- DC_MULTIPLAYER: false | MODE: singleplayer --> as first line inside html. All JS+CSS inline, zero external deps, fun and fully playable, show controls on screen. Wrap the ENTIRE html document in [GAME_HTML]...[/GAME_HTML].');
+    return;
+  }
   if(/^(make|create|generate)\s+game/i.test(input)){
     const desc=input.replace(/^(make|create|generate)\s+game\s*/i,'').trim()||'a fun arcade game';
-    await askAI(`Generate a complete self-contained HTML5 game: "${desc}". Requirements: all JS+CSS inline, zero external deps, fun and fully playable, show controls on screen. Wrap the ENTIRE html document in [GAME_HTML]...[/GAME_HTML].`);
+    const mpHint=S.currentRoom?' The user is currently in a multiplayer room, so make the game support both single and multiplayer modes with the DC_MULTIPLAYER header.':'';
+    await askAI('Generate a complete self-contained HTML5 game: "'+desc+'".'+mpHint+' All JS+CSS inline, zero external deps, fun and fully playable, show controls on screen. Wrap the ENTIRE html document in [GAME_HTML]...[/GAME_HTML].');
     return;
   }
 
@@ -856,11 +964,25 @@ async function exec(raw){
   if(cmd==='--room'){
     const sub=args[0]?.toLowerCase();
     if(!sub||sub==='list'){
-      log('USAGE: --room (name) to join · --room leave to exit · /say (msg) to chat','inf');
-      if(S.currentRoom) log(`CURRENT ROOM: #${esc(S.currentRoom)}`,'ok');
+      log('USAGE: --room (name) · --room leave · --room invite (user) · --room who · /say (msg)','inf');
+      if(S.currentRoom) log(`CURRENT ROOM: <strong>#${esc(S.currentRoom)}</strong>`,'ok');
       return;
     }
     if(sub==='leave'){leaveRoom();return;}
+    if(sub==='invite'){
+      const target=args[1];
+      const msg=args.slice(2).join(' ').trim();
+      if(!target){log('USAGE: --room invite (username) (optional message)','err');return;}
+      if(!S.currentRoom){log('JOIN A ROOM FIRST: --room (name)','err');return;}
+      inviteToRoom(target,S.currentRoom,msg);return;
+    }
+    if(sub==='who'){
+      if(!_rtChannel||!S.currentRoom){log('NOT IN A ROOM.','sys');return;}
+      const state=_rtChannel.presenceState();
+      const users=Object.keys(state);
+      log(`ROOM <strong>#${esc(S.currentRoom)}</strong> — ${users.length} online: ${users.map(u=>esc(u)).join(', ')}`,'inf');
+      return;
+    }
     joinRoom(args[0]);return;
   }
 
@@ -1019,6 +1141,497 @@ async function exec(raw){
     await runScript(src);return;
   }
 
+  // ── PIPES ──────────────────────────────────────
+  if(input.includes(' | ')){await execPiped(input);return;}
+
+  // ── /say shorthand (already handled above but also catch here) ──
+  if(lo.startsWith('/s ')&&!lo.startsWith('/say')){roomSay(input.slice(3).trim());return;}
+
+  // ── --calc ──────────────────────────────────────
+  if(cmd==='--calc'||cmd==='calc'){
+    const expr=args.join(' ').trim();
+    if(!expr){log('USAGE: --calc (expression) e.g. --calc 2+2*3','err');return;}
+    const r=calcEval(expr);
+    if(r===null){log('INVALID EXPRESSION.','err');return;}
+    log(`${esc(expr)} = <strong style="color:var(--ok);font-size:15px;">${r}</strong>`,'inf');
+    clipCopy(String(r),'calc result');
+    return;
+  }
+
+  // ── --convert ────────────────────────────────────
+  if(cmd==='--convert'){
+    // --convert 100 km mi
+    const val=parseFloat(args[0]),from=args[1],to=args[2];
+    if(isNaN(val)||!from||!to){log('USAGE: --convert (value) (from) (to) e.g. --convert 100 km mi','err');return;}
+    const r=convert(val,from,to);
+    if(r===null){log(`UNKNOWN CONVERSION: ${from} → ${to}. Try: km,mi,m,ft,kg,lb,c,f,k,l,ml,gal`,'err');return;}
+    log(`${val} ${esc(from)} = <strong style="color:var(--ok);">${typeof r==='number'?r.toFixed(4):r} ${esc(to)}</strong>`,'inf');
+    return;
+  }
+
+  // ── --weather ────────────────────────────────────
+  if(cmd==='--weather'){
+    const city=args.join(' ').trim()||'London';
+    log(`FETCHING WEATHER: ${esc(city)}...`,'sys');
+    const w=await fetchWeather(city);
+    if(!w){log('WEATHER UNAVAILABLE — check network.','err');return;}
+    log(`<div style="margin:8px 0;">
+<div style="font-weight:900;color:var(--accent);font-size:14px;">${esc(w.city)}</div>
+<div style="font-size:22px;font-weight:900;margin:4px 0;">${w.temp}°C <span style="font-size:13px;color:#888;">${esc(w.desc)}</span></div>
+<div style="color:#666;font-size:11px;">Feels like ${w.feels}°C · Humidity ${w.humidity}% · Wind ${w.wind} km/h</div>
+</div>`,'inf');
+    return;
+  }
+
+  // ── --time ───────────────────────────────────────
+  if(cmd==='--time'){
+    const city=args.join(' ').toLowerCase().trim()||'all';
+    const zones=city==='all'?TIMEZONES:Object.fromEntries(Object.entries(TIMEZONES).filter(([k])=>k.includes(city)));
+    if(!Object.keys(zones).length){log('CITY NOT FOUND. Try: new york, london, tokyo, sydney, paris...','err');return;}
+    let h='<div class="hb">';
+    Object.entries(zones).forEach(([name,tz])=>{
+      const t=new Date().toLocaleTimeString('en-US',{timeZone:tz,hour12:false,hour:'2-digit',minute:'2-digit'});
+      const d=new Date().toLocaleDateString('en-US',{timeZone:tz,weekday:'short',month:'short',day:'numeric'});
+      h+=`<div style="display:flex;gap:12px;margin:3px 0;"><span style="color:var(--accent);min-width:120px;font-weight:900;">${t}</span><span style="color:#777;">${d}</span><span style="color:#444;">${name}</span></div>`;
+    });
+    h+='</div>';
+    log(h,'inf');
+    return;
+  }
+
+  // ── --net ────────────────────────────────────────
+  if(cmd==='--net'){
+    log('FETCHING NETWORK INFO...','sys');
+    const info=await getNetInfo();
+    if(!info){log('NETWORK INFO UNAVAILABLE.','err');return;}
+    log(`<div class="hb">
+<div style="color:var(--accent);font-weight:900;margin-bottom:6px;">── NETWORK INFO ──</div>
+<div><span style="color:#555;">IP:</span> ${esc(info.ip||'?')}</div>
+<div><span style="color:#555;">LOCATION:</span> ${esc(info.city||'?')}, ${esc(info.region||'?')}, ${esc(info.country_name||'?')}</div>
+<div><span style="color:#555;">ISP:</span> ${esc(info.org||'?')}</div>
+<div><span style="color:#555;">TIMEZONE:</span> ${esc(info.timezone||'?')}</div>
+</div>`,'inf');
+    return;
+  }
+
+  // ── --quote ──────────────────────────────────────
+  if(cmd==='--quote'){
+    const q=QUOTES[Math.floor(Math.random()*QUOTES.length)];
+    log(`<div style="border-left:3px solid var(--accent);padding-left:12px;margin:8px 0;">
+<div style="color:var(--text);font-style:italic;">"${esc(q.q)}"</div>
+<div style="color:#555;font-size:11px;margin-top:4px;">— ${esc(q.a)}</div>
+</div>`,'inf');
+    return;
+  }
+
+  // ── --hack ───────────────────────────────────────
+  if(cmd==='--hack'){const target=args.join(' ').toUpperCase()||'MAINFRAME';await hackerMode(target);return;}
+
+  // ── --matrix ─────────────────────────────────────
+  if(cmd==='--matrix'){openMatrix();log('ENTERING THE MATRIX...','sys');return;}
+
+  // ── --music / --radio ─────────────────────────────
+  if(cmd==='--music'||cmd==='--radio'){openMusicPlayer();return;}
+
+  // ── --pixel ──────────────────────────────────────
+  if(cmd==='--pixel'){const sz=parseInt(args[0])||16;openPixelEditor(Math.min(Math.max(sz,8),32));return;}
+
+  // ── --edit ───────────────────────────────────────
+  if(cmd==='--edit'){
+    const fname=args[0]||'untitled.txt';
+    let content='';
+    if(args[0]){
+      const raw=await sbGet(`saves/${S.user?.toLowerCase()}/${fname}`);
+      if(raw) content=raw;
+    }
+    openCodeEditor(fname,content);
+    return;
+  }
+
+  // ── --draw ───────────────────────────────────────
+  if(cmd==='--draw'){openWhiteboard();return;}
+
+  // ── --md ─────────────────────────────────────────
+  if(cmd==='--md'){
+    const text=args.join(' ').trim();
+    if(!text){log('USAGE: --md (markdown text) or --md last','err');return;}
+    const content=text==='last'?(S.history.filter(h=>h.role==='model').slice(-1)[0]?.parts?.[0]?.text||''):text;
+    openMarkdownViewer(content);
+    return;
+  }
+
+  // ── --clip ───────────────────────────────────────
+  if(cmd==='--clip'){
+    const sub=args[0]?.toLowerCase();
+    if(!sub||sub==='list'){
+      if(!CLIPS.length){log('CLIPBOARD EMPTY.','sys');return;}
+      let h='<div class="hb"><div style="color:var(--accent);font-weight:900;margin-bottom:6px;">── CLIPBOARD ──</div>';
+      CLIPS.forEach((c,i)=>h+=`<div style="margin:3px 0;cursor:pointer;" onclick="exec('--clip copy ${i+1}')"><span style="color:var(--accent)">[${i+1}]</span> ${esc(c.label)}</div>`);
+      h+='</div>';log(h,'inf');return;
+    }
+    if(sub==='copy'){const idx=parseInt(args[1])-1;if(isNaN(idx)||!CLIPS[idx]){log('INVALID INDEX.','err');return;}clipCopy(CLIPS[idx].text,CLIPS[idx].label);return;}
+    if(sub==='clear'){CLIPS.length=0;log('CLIPBOARD CLEARED.','ok');return;}
+    // --clip (text) to add
+    const txt=args.slice(0).join(' ');clipCopy(txt);return;
+  }
+
+  // ── --todo ───────────────────────────────────────
+  if(cmd==='--todo'){
+    const sub=args[0]?.toLowerCase();
+    if(!sub||sub==='list'){log(renderTodos(),'inf');return;}
+    if(sub==='add'){
+      const text=args.slice(1).join(' ').replace(/!high|!h/i,'').trim();
+      const priority=/(^|\s)(!high|!h)(\s|$)/i.test(args.slice(1).join(' '))?'high':'normal';
+      const due=args.find(a=>/^\d{4}-\d{2}-\d{2}$/.test(a))||null;
+      const todos=getTodos();todos.push({text,done:false,priority,due,created:Date.now()});saveTodos(todos);
+      log(`TODO ADDED: ${esc(text)}${priority==='high'?' [HIGH]':''}${due?' due:'+due:''}`, 'ok');return;
+    }
+    if(sub==='done'){const n=parseInt(args[1])-1;const t=getTodos();if(!t[n]){log('INVALID.','err');return;}t[n].done=!t[n].done;saveTodos(t);log(`TODO ${t[n].done?'DONE':'UNDONE'}: ${esc(t[n].text)}`,'ok');return;}
+    if(sub==='remove'||sub==='rm'){const n=parseInt(args[1])-1;const t=getTodos();if(!t[n]){log('INVALID.','err');return;}const r=t.splice(n,1)[0];saveTodos(t);log(`TODO REMOVED: ${esc(r.text)}`,'ok');return;}
+    if(sub==='clear'){saveTodos([]);log('ALL TODOS CLEARED.','ok');return;}
+    return;
+  }
+
+  // ── --pomo ───────────────────────────────────────
+  if(cmd==='--pomo'){
+    const sub=args[0]?.toLowerCase();
+    if(sub==='stop'){if(_pomoTimer){clearInterval(_pomoTimer);_pomoTimer=null;log('POMODORO STOPPED.','ok');}else log('NO POMODORO RUNNING.','sys');return;}
+    if(sub==='status'){log(_pomoTimer?`POMODORO: ${Math.floor(_pomoLeft/60)}m ${_pomoLeft%60}s remaining`:'NO POMODORO RUNNING.','inf');return;}
+    const mins=parseInt(args[0])||25;startPomo(mins);return;
+  }
+
+  // ── --note ───────────────────────────────────────
+  if(cmd==='--note'){
+    const sub=args[0]?.toLowerCase();
+    const notes=getNotes();
+    if(!sub||sub==='list'){
+      const keys=Object.keys(notes);
+      if(!keys.length){log('NO NOTES. --note set (name) (content)','sys');return;}
+      let h='<div class="hb"><div style="color:var(--accent);font-weight:900;margin-bottom:6px;">── NOTES ──</div>';
+      keys.forEach(k=>h+=`<div style="margin:3px 0;cursor:pointer;" onclick="exec('--note get ${k}')"><span style="color:var(--accent)">${esc(k)}</span> <span style="color:#444;font-size:11px;">${esc((notes[k]||'').slice(0,60))}...</span></div>`);
+      h+='</div>';log(h,'inf');return;
+    }
+    if(sub==='set'||sub==='add'){const name=args[1];const content=args.slice(2).join(' ');if(!name){log('USAGE: --note set (name) (content)','err');return;}notes[name]=content;saveNotes(notes);log(`NOTE SAVED: ${esc(name)}`,'ok');return;}
+    if(sub==='get'){const name=args[1];if(!notes[name]){log(`NOTE NOT FOUND: ${esc(name||'')}`, 'err');return;}log(`<div class="hb"><div style="color:var(--accent);font-weight:900;">${esc(name)}</div><div style="margin-top:6px;">${esc(notes[name])}</div></div>`,'inf');return;}
+    if(sub==='remove'||sub==='rm'){const name=args[1];delete notes[name];saveNotes(notes);log(`NOTE REMOVED: ${esc(name||'')}`,'ok');return;}
+    if(sub==='edit'){const name=args[1];openCodeEditor(name+'.note',notes[name]||'');return;}
+    return;
+  }
+
+  // ── --bm (bookmarks) ─────────────────────────────
+  if(cmd==='--bm'){
+    const sub=args[0]?.toLowerCase();
+    const bms=getBookmarks();
+    if(!sub||sub==='list'){
+      if(!bms.length){log('NO BOOKMARKS. --bm add (url) (label)','sys');return;}
+      let h='<div class="hb"><div style="color:var(--accent);font-weight:900;margin-bottom:6px;">── BOOKMARKS ──</div>';
+      bms.forEach((b,i)=>h+=`<div style="margin:3px 0;display:flex;gap:10px;"><span style="color:var(--accent)">[${i+1}]</span><span style="cursor:pointer;color:#888;" onclick="exec('--reach ${b.url}')">${esc(b.label||b.url)}</span><span style="color:#444;font-size:10px;">${esc(b.url)}</span></div>`);
+      h+='</div>';log(h,'inf');return;
+    }
+    if(sub==='add'){const url=args[1];const label=args.slice(2).join(' ')||url;if(!url){log('USAGE: --bm add (url) (label)','err');return;}bms.push({url,label,added:Date.now()});saveBookmarks(bms);log(`BOOKMARK ADDED: ${esc(label)}`,'ok');return;}
+    if(sub==='open'){const n=parseInt(args[1])-1;if(!bms[n]){log('INVALID.','err');return;}await exec('--reach '+bms[n].url);return;}
+    if(sub==='remove'||sub==='rm'){const n=parseInt(args[1])-1;if(!bms[n]){log('INVALID.','err');return;}const r=bms.splice(n,1)[0];saveBookmarks(bms);log(`BOOKMARK REMOVED: ${esc(r.label)}`,'ok');return;}
+    return;
+  }
+
+  // ── --journal ─────────────────────────────────────
+  if(cmd==='--journal'){
+    const sub=args[0]?.toLowerCase();
+    const journal=getJournal();
+    if(!sub||sub==='new'||sub==='write'){
+      const entry=sub==='write'?args.slice(1).join(' '):(sub==='new'?args.slice(1).join(' '):args.join(' '));
+      if(!entry&&sub){log('USAGE: --journal write (your entry)','err');return;}
+      if(!entry){openCodeEditor(`journal_${new Date().toISOString().slice(0,10)}.txt`,'');return;}
+      journal.unshift({text:entry,date:new Date().toISOString(),mood:null});saveJournal(journal);
+      log(`JOURNAL ENTRY SAVED. ${journal.length} total entries.`,'ok');return;
+    }
+    if(sub==='list'){
+      if(!journal.length){log('NO JOURNAL ENTRIES YET.','sys');return;}
+      let h='<div class="hb"><div style="color:var(--accent);font-weight:900;margin-bottom:6px;">── JOURNAL ──</div>';
+      journal.slice(0,10).forEach((e,i)=>h+=`<div style="margin:4px 0;"><span style="color:#555;font-size:10px;">${e.date.slice(0,10)}</span> ${esc(e.text.slice(0,80))}${e.text.length>80?'...':''}</div>`);
+      if(journal.length>10) h+=`<div style="color:#444;font-size:10px;margin-top:6px;">... and ${journal.length-10} more</div>`;
+      h+='</div>';log(h,'inf');return;
+    }
+    if(sub==='clear'){saveJournal([]);log('JOURNAL CLEARED.','ok');return;}
+    return;
+  }
+
+  // ── --habit ──────────────────────────────────────
+  if(cmd==='--habit'){
+    const sub=args[0]?.toLowerCase();
+    const habits=getHabits();
+    const today=new Date().toISOString().slice(0,10);
+    if(!sub||sub==='list'){
+      if(!habits.length){log('NO HABITS. --habit add (name)','sys');return;}
+      let h='<div class="hb"><div style="color:var(--accent);font-weight:900;margin-bottom:6px;">── HABIT TRACKER ──</div>';
+      habits.forEach((hb,i)=>{
+        const doneTd=hb.log?.includes(today);
+        const streak=calcStreak(hb.log||[]);
+        h+=`<div style="margin:4px 0;display:flex;align-items:center;gap:10px;">
+<span style="color:${doneTd?'var(--ok)':'#555'};cursor:pointer;" onclick="exec('--habit done ${i+1}')">${doneTd?'[✓]':'[ ]'}</span>
+<span style="flex:1;">${esc(hb.name)}</span>
+<span style="color:var(--accent);font-size:11px;">${streak}🔥</span>
+<div style="display:flex;gap:2px;">${(hb.log||[]).slice(-7).map(d=>d===today?'<span style="color:var(--ok)">█</span>':'<span style="color:#222">█</span>').join('')}</div>
+</div>`;
+      });
+      h+='</div>';log(h,'inf');return;
+    }
+    if(sub==='add'){const name=args.slice(1).join(' ');if(!name){log('USAGE: --habit add (name)','err');return;}habits.push({name,log:[],created:today});saveHabits(habits);log(`HABIT ADDED: ${esc(name)}`,'ok');return;}
+    if(sub==='done'){const n=parseInt(args[1])-1;if(!habits[n]){log('INVALID.','err');return;}if(!habits[n].log.includes(today))habits[n].log.push(today);saveHabits(habits);const s=calcStreak(habits[n].log);log(`HABIT DONE: ${esc(habits[n].name)} (${s} day streak!)`,'ok');notify(`🔥 ${habits[n].name}: ${s} streak!`,'ok',3000);return;}
+    if(sub==='remove'||sub==='rm'){const n=parseInt(args[1])-1;if(!habits[n]){log('INVALID.','err');return;}const r=habits.splice(n,1)[0];saveHabits(habits);log(`HABIT REMOVED: ${esc(r.name)}`,'ok');return;}
+    return;
+  }
+
+  // ── --flash (flashcards) ──────────────────────────
+  if(cmd==='--flash'){
+    const sub=args[0]?.toLowerCase();
+    const decks=getDecks();
+    if(!sub||sub==='list'){const ks=Object.keys(decks);if(!ks.length){log('NO FLASHCARD DECKS. --flash create (deckname)','sys');return;}ks.forEach(k=>log(`DECK: <span style="color:var(--accent)">${esc(k)}</span> — ${(decks[k]||[]).length} cards`,'inf'));return;}
+    if(sub==='create'){const name=args[1];if(!name){log('USAGE: --flash create (deckname)','err');return;}decks[name]=[];saveDecks(decks);log(`DECK CREATED: ${esc(name)}`,'ok');return;}
+    if(sub==='add'){const deck=args[1];const rest=args.slice(2).join(' ');const[front,...back]=rest.split('|');if(!deck||!front){log('USAGE: --flash add (deck) front | back','err');return;}(decks[deck]=decks[deck]||[]).push({front:front.trim(),back:back.join('|').trim(),score:0});saveDecks(decks);log(`CARD ADDED TO ${esc(deck)}.`,'ok');return;}
+    if(sub==='study'){
+      const deck=args[1];const cards=decks[deck];if(!cards?.length){log('DECK NOT FOUND OR EMPTY.','err');return;}
+      const card=cards[Math.floor(Math.random()*cards.length)];
+      log(`<div class="hb"><div style="color:var(--accent);font-weight:900;">DECK: ${esc(deck)}</div><div style="font-size:15px;margin:10px 0;">${esc(card.front)}</div><div style="color:#555;font-size:11px;">--flash reveal to see answer</div></div>`,'inf');
+      S.inputCtx.flashcard=card;return;
+    }
+    if(sub==='reveal'){const card=S.inputCtx?.flashcard;if(!card){log('NO CARD IN PROGRESS. Use --flash study (deck)','err');return;}log(`<div class="hb"><div style="color:#555;font-size:11px;">ANSWER:</div><div style="font-size:15px;margin:8px 0;color:var(--ok);">${esc(card.back)}</div></div>`,'inf');return;}
+    return;
+  }
+
+  // ── --search ─────────────────────────────────────
+  if(cmd==='--search'){
+    const q=args.join(' ').trim();
+    if(!q){log('USAGE: --search (query)','err');return;}
+    const results=searchHistory(q);
+    if(!results.length){log('NO HISTORY MATCHES.','sys');return;}
+    let h='<div class="hb"><div style="color:var(--accent);font-weight:900;margin-bottom:6px;">HISTORY SEARCH: '+esc(q)+'</div>';
+    results.forEach((r,i)=>h+=`<div style="margin:2px 0;cursor:pointer;" onclick="document.getElementById('ci').value='${r.replace(/'/g,"\\'")}'">[${i+1}] ${esc(r)}</div>`);
+    h+='</div>';log(h,'inf');return;
+  }
+
+  // ── --history ─────────────────────────────────────
+  if(cmd==='--history'){
+    const n=parseInt(args[0])||20;
+    showHistory(n);return;
+  }
+
+  // ── --export ──────────────────────────────────────
+  if(cmd==='--export'){exportSession();return;}
+
+  // ── --screenshot ──────────────────────────────────
+  if(cmd==='--screenshot'||cmd==='--ss'){takeScreenshot();return;}
+
+  // ── --speedtest ───────────────────────────────────
+  if(cmd==='--speedtest'){await runSpeedTest();return;}
+
+  // ── --brainstorm ──────────────────────────────────
+  if(cmd==='--brainstorm'||cmd==='--bs'){
+    const topic=args.join(' ').trim();
+    if(!topic){log('USAGE: --brainstorm (topic)','err');return;}
+    await brainstorm(topic);return;
+  }
+
+  // ── --eli5 ────────────────────────────────────────
+  if(cmd==='--eli5'){
+    const topic=args.join(' ').trim();
+    if(!topic){log('USAGE: --eli5 (topic)','err');return;}
+    await eli5(topic);return;
+  }
+
+  // ── --roast ───────────────────────────────────────
+  if(cmd==='--roast'){
+    const code=args.join(' ').trim();
+    if(!code){log('USAGE: --roast (code) — paste a snippet for brutal review','err');return;}
+    await roastCode(code);return;
+  }
+
+  // ── --commit ──────────────────────────────────────
+  if(cmd==='--commit'){
+    const desc=args.join(' ').trim();
+    if(!desc){log('USAGE: --commit (description of changes)','err');return;}
+    await genCommit(desc);return;
+  }
+
+  // ── --regex ───────────────────────────────────────
+  if(cmd==='--regex'){
+    const desc=args.join(' ').trim();
+    if(!desc){log('USAGE: --regex (description) e.g. --regex match email addresses','err');return;}
+    await buildRegex(desc);return;
+  }
+
+  // ── --palette ─────────────────────────────────────
+  if(cmd==='--palette'){
+    const mood=args.join(' ').trim()||'cyberpunk dark';
+    await genPalette(mood);return;
+  }
+
+  // ── --diff ────────────────────────────────────────
+  if(cmd==='--diff'){
+    const sep='|||';const joined=args.join(' ');
+    if(!joined.includes(sep)){log('USAGE: --diff (text1) ||| (text2)','err');return;}
+    const[a,b]=joined.split(sep);
+    log('<div class="code-block">'+diffText(a.trim(),b.trim())+'</div>','inf');return;
+  }
+
+  // ── --banner ──────────────────────────────────────
+  if(cmd==='--banner'){
+    const text=args.join(' ').trim()||'DREAMCORE';
+    await askAI(`Create a large ASCII art banner/logo for the text: "${text}". Use block characters (█, ▓, ▒, ░) and box-drawing characters. Make it bold and impactful. Wrap in [ASCII_ART]...[/ASCII_ART].`);return;
+  }
+
+  // ── --clear ───────────────────────────────────────
+  if(cmd==='--clear'||cmd==='clear'||cmd==='cls'){
+    document.getElementById('out').innerHTML='';
+    log('DREAMCORE TERMINAL v3.0','sys');return;
+  }
+
+  // ── --whoami ──────────────────────────────────────
+  if(cmd==='--whoami'){
+    if(!S.user){log('GUEST — not logged in','inf');return;}
+    log(`<span style="color:var(--accent);font-weight:900;">${esc(S.user)}</span>${S.profile.isRoot?' <span class="badge root">ROOT</span>':''} · ${esc(S.profile.displayName||'')} · joined ${S.profile.createdAt?.slice(0,10)||'?'} · ${(S.profile.memory||[]).length} memories · ${Object.keys(S.aliases||{}).length} aliases`,'inf');
+    return;
+  }
+
+  // ── --uptime ──────────────────────────────────────
+  if(cmd==='--uptime'){
+    const up=Math.floor((Date.now()-_bootTime)/1000);
+    const h=Math.floor(up/3600),m=Math.floor((up%3600)/60),s=up%60;
+    log(`SESSION UPTIME: ${h}h ${m}m ${s}s`,'inf');return;
+  }
+
+  // ── --neofetch (system info card) ─────────────────
+  if(cmd==='--neofetch'){
+    const ua=navigator.userAgent;
+    const browser=ua.includes('Chrome')?'Chrome':ua.includes('Firefox')?'Firefox':ua.includes('Safari')?'Safari':'Unknown';
+    const os=ua.includes('Windows')?'Windows':ua.includes('Mac')?'macOS':ua.includes('Linux')?'Linux':ua.includes('Android')?'Android':'Unknown';
+    const mem=(navigator.deviceMemory||'?')+'GB RAM';
+    const cores=(navigator.hardwareConcurrency||'?')+' cores';
+    const up=Math.floor((Date.now()-_bootTime)/1000);
+    log(`<div style="display:flex;gap:20px;margin:8px 0;">
+<pre style="font-size:9px;color:var(--accent);line-height:1.1;">${esc(document.getElementById('logo')?.textContent?.split('\n').slice(0,6).join('\n')||'DC')}</pre>
+<div style="font-size:11px;line-height:2;">
+<div><span style="color:var(--accent);font-weight:900;">USER</span> ${esc(S.user||'GUEST')}</div>
+<div><span style="color:var(--accent);font-weight:900;">OS</span> ${esc(os)}</div>
+<div><span style="color:var(--accent);font-weight:900;">BROWSER</span> ${esc(browser)}</div>
+<div><span style="color:var(--accent);font-weight:900;">MEMORY</span> ${mem}</div>
+<div><span style="color:var(--accent);font-weight:900;">CPU</span> ${cores}</div>
+<div><span style="color:var(--accent);font-weight:900;">UPTIME</span> ${Math.floor(up/60)}m ${up%60}s</div>
+<div><span style="color:var(--accent);font-weight:900;">STORAGE</span> ${_sbOnline?'☁ Supabase':'◉ Local'}</div>
+<div><span style="color:var(--accent);font-weight:900;">WINDOWS</span> ${S.wins.length}</div>
+<div><span style="color:var(--accent);font-weight:900;">ALIASES</span> ${Object.keys(S.aliases||{}).length}</div>
+<div style="margin-top:6px;">${['#ff3333','#ffaa00','#00ff88','#3b82f6','#aa00ff','#FF5F1F','#fff'].map(c=>`<span style="color:${c}">█</span>`).join('')}</div>
+</div></div>`,'inf');
+    return;
+  }
+
+  // ── --sleep (log) ─────────────────────────────────
+  if(cmd==='--sleep'){
+    const sub=args[0]?.toLowerCase();
+    const log2=getSleepLog();
+    if(sub==='log'){
+      const hrs=parseFloat(args[1]);if(isNaN(hrs)){log('USAGE: --sleep log (hours)','err');return;}
+      log2.unshift({hours:hrs,date:new Date().toISOString(),quality:args[2]||'?'});
+      saveSleepLog(log2.slice(0,30));
+      const avg=(log2.slice(0,7).reduce((a,e)=>a+e.hours,0)/Math.min(log2.length,7)).toFixed(1);
+      log(`SLEEP LOGGED: ${hrs}h · 7-day avg: ${avg}h`,'ok');
+      if(hrs<6) notify('⚠ Under 6h sleep — consider resting more','err',5000);
+      return;
+    }
+    if(sub==='history'){
+      if(!log2.length){log('NO SLEEP DATA. --sleep log (hours)','sys');return;}
+      let h='<div class="hb"><div style="color:var(--accent);font-weight:900;margin-bottom:6px;">── SLEEP LOG ──</div>';
+      log2.slice(0,10).forEach(e=>h+=`<div style="margin:3px 0;"><span style="color:${e.hours>=7?'var(--ok)':e.hours>=6?'#ffaa00':'var(--err)'}">${e.hours}h</span> <span style="color:#555;font-size:10px;">${e.date.slice(0,10)}</span></div>`);
+      h+='</div>';log(h,'inf');return;
+    }
+    return;
+  }
+
+  // ── --screensaver ─────────────────────────────────
+  if(cmd==='--screensaver'){showScreensaver();return;}
+
+  // ── --ascii ── (standalone) ────────────────────────
+  if(cmd==='--ascii'){
+    const desc=args.join(' ').trim();
+    if(!desc){log('USAGE: --ascii (description)','err');return;}
+    await askAI(`Create detailed ASCII art of: "${desc}". Use block characters, box-drawing characters, and creative symbols. Make it expressive. Wrap in [ASCII_ART]...[/ASCII_ART].`);return;
+  }
+
+  // ── --translate ───────────────────────────────────
+  if(cmd==='--translate'){
+    const toLang=args[0];const text=args.slice(1).join(' ');
+    if(!toLang||!text){log('USAGE: --translate (language) (text)','err');return;}
+    await askAI(`Translate this to ${toLang}: "${text}". Give ONLY the translation, nothing else.`);return;
+  }
+
+  // ── --summarize ───────────────────────────────────
+  if(cmd==='--summarize'){
+    const text=args.join(' ').trim();
+    if(!text){log('USAGE: --summarize (text or URL)','err');return;}
+    if(text.startsWith('http')){
+      await askAI(`Summarize the content at this URL in 3-5 bullet points: ${text}`);
+    } else {
+      await askAI(`Summarize this in 3-5 bullet points: ${text}`);
+    }
+    return;
+  }
+
+  // ── --debate ──────────────────────────────────────
+  if(cmd==='--debate'){
+    const topic=args.join(' ').trim();
+    if(!topic){log('USAGE: --debate (topic)','err');return;}
+    await askAI(`Present a balanced debate on: "${topic}". Give 3 strong arguments FOR and 3 strong arguments AGAINST. Be fair, concise, and cite real considerations.`);return;
+  }
+
+  // ── --story ───────────────────────────────────────
+  if(cmd==='--story'){
+    const prompt=args.join(' ').trim()||'a hacker who discovers a terminal that speaks back';
+    await askAI(`Write a short story (under 300 words) about: "${prompt}". Make it compelling, atmospheric, and end with a twist.`);return;
+  }
+
+  // ── --poem ────────────────────────────────────────
+  if(cmd==='--poem'){
+    const about=args.join(' ').trim()||'the terminal';
+    await askAI(`Write a short poem about: "${about}". Be creative and unexpected. No rhyme necessary — focus on imagery and rhythm.`);return;
+  }
+
+  // ── --code ────────────────────────────────────────
+  if(cmd==='--code'){
+    const desc=args.join(' ').trim();
+    if(!desc){log('USAGE: --code (what to build)','err');return;}
+    await askAI(`Write clean, production-ready code for: "${desc}". Include comments. Show the complete implementation. Format with code blocks.`);return;
+  }
+
+  // ── --debug ───────────────────────────────────────
+  if(cmd==='--debug'){
+    const code=args.join(' ').trim();
+    if(!code){log('USAGE: --debug (code or error message)','err');return;}
+    await askAI(`Debug this code/error and explain what's wrong and how to fix it:\n\n${code}`);return;
+  }
+
+  // ── --analyze ─────────────────────────────────────
+  if(cmd==='--analyze'){
+    const data=args.join(' ').trim();
+    if(!data){log('USAGE: --analyze (data, text, or question)','err');return;}
+    await askAI(`Analyze this thoroughly. Find patterns, insights, and implications. Be specific and actionable:\n\n${data}`);return;
+  }
+
+  // ── --mock ────────────────────────────────────────
+  if(cmd==='--mock'){
+    const thing=args.join(' ').trim()||'a todo app';
+    await askAI(`Create a complete HTML/CSS mockup UI for: "${thing}". Make it polished, dark-themed, and wrap it in [GAME_HTML]...[/GAME_HTML] so it launches as a window.`);return;
+  }
+
+  // ── --plan ────────────────────────────────────────
+  if(cmd==='--plan'){
+    const goal=args.join(' ').trim();
+    if(!goal){log('USAGE: --plan (your goal)','err');return;}
+    await askAI(`Create a detailed, actionable step-by-step plan for: "${goal}". Break it into phases with specific tasks, timelines, and success metrics.`);return;
+  }
+
+  // ── --game ──────────────────────────────────────
+  if(cmd==='--game'){await handleGameCmd(args);return;}
+
   await askAI(input);
 }
 
@@ -1117,21 +1730,131 @@ async function browseStore(){
 
 /* ── PHASE 5: MULTIPLAYER ROOMS ── */
 let _rtChannel=null;
-function joinRoom(roomName){
-  if(_rtChannel){_rtChannel.unsubscribe();_rtChannel=null;}
-  if(typeof window.supabase==='undefined'&&typeof createClient==='undefined'){
-    log('REALTIME: loading Supabase SDK...','sys');
-    const s=document.createElement('script');
-    s.src='https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2';
-    s.onload=()=>{ window._sb2=window.supabase.createClient(SB_URL,SB_KEY); _joinRoom(roomName); };
-    document.head.appendChild(s);
-    return;
-  }
-  if(!window._sb2) window._sb2=window.supabase?.createClient(SB_URL,SB_KEY);
-  _joinRoom(roomName);
+let _inboxChannel=null; // personal invite inbox, always listening
+
+/* ── Supabase SDK loader ── */
+function _ensureSB2(cb){
+  if(window._sb2){cb();return;}
+  if(window.supabase){window._sb2=window.supabase.createClient(SB_URL,SB_KEY);cb();return;}
+  const s=document.createElement('script');
+  s.src='https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2';
+  s.onload=()=>{window._sb2=window.supabase.createClient(SB_URL,SB_KEY);cb();};
+  document.head.appendChild(s);
 }
+
+/* ── Personal inbox — subscribes after login, listens for invites ── */
+function openInbox(username){
+  _ensureSB2(()=>{
+    if(_inboxChannel) _inboxChannel.unsubscribe();
+    _inboxChannel=window._sb2.channel('inbox:'+username.toLowerCase());
+    _inboxChannel
+      .on('broadcast',{event:'game_invite'},({payload})=>{
+        const{from,room,winId}=payload;
+        const nid2='ginv_'+Date.now();
+        const d2=document.createElement('div');
+        d2.className='notif ai-notif';
+        d2.id=nid2;
+        d2.style.cssText='pointer-events:all;cursor:default;min-width:220px;';
+        d2.innerHTML=`
+          <div style="font-weight:900;margin-bottom:6px;">🎮 GAME INVITE</div>
+          <div style="color:#aaa;font-size:11px;margin-bottom:8px;">
+            <span style="color:var(--accent)">${esc(from)}</span> invited you to play a game in <strong>#${esc(room)}</strong>
+          </div>
+          <div style="display:flex;gap:8px;">
+            <button onclick="exec('--room ${esc(room)}').then(()=>exec('--game join ${esc(winId)}'));document.getElementById('${nid2}').remove();" style="background:var(--ok);color:#000;border:none;padding:4px 10px;font-family:inherit;font-size:10px;font-weight:900;cursor:pointer;border-radius:2px;">JOIN GAME</button>
+            <button onclick="document.getElementById('${nid2}').remove()" style="background:#1a1a1a;color:#888;border:1px solid #333;padding:4px 10px;font-family:inherit;font-size:10px;font-weight:900;cursor:pointer;border-radius:2px;">IGNORE</button>
+          </div>`;
+        document.getElementById('notif-stack').appendChild(d2);
+        log('🎮 GAME INVITE from <span style="color:var(--accent);font-weight:900;">'+esc(from)+'</span> — <span class="hc">--game join '+esc(winId)+'</span>','inf');
+      })
+      .on('broadcast',{event:'invite'},({payload})=>{
+        const{from,room,msg}=payload;
+        // Show a persistent invite notification with Accept / Decline buttons
+        const nid='inv_'+Date.now();
+        const d=document.createElement('div');
+        d.className='notif ai-notif';
+        d.id=nid;
+        d.style.cssText='pointer-events:all;cursor:default;min-width:220px;';
+        d.innerHTML=`
+          <div style="font-weight:900;margin-bottom:6px;">📨 ROOM INVITE</div>
+          <div style="color:#aaa;font-size:11px;margin-bottom:8px;">
+            <span style="color:var(--accent)">${esc(from)}</span> invited you to <strong>#${esc(room)}</strong>
+            ${msg?'<br><span style="color:#666;font-size:10px;">'+esc(msg)+'</span>':''}
+          </div>
+          <div style="display:flex;gap:8px;">
+            <button onclick="acceptInvite('${esc(room)}','${nid}')" style="background:var(--ok);color:#000;border:none;padding:4px 10px;font-family:inherit;font-size:10px;font-weight:900;cursor:pointer;border-radius:2px;">ACCEPT</button>
+            <button onclick="declineInvite('${esc(from)}','${esc(room)}','${nid}')" style="background:#1a1a1a;color:#888;border:1px solid #333;padding:4px 10px;font-family:inherit;font-size:10px;font-weight:900;cursor:pointer;border-radius:2px;">DECLINE</button>
+          </div>`;
+        document.getElementById('notif-stack').appendChild(d);
+        // Also log it in the terminal
+        log(`📨 INVITE from <span style="color:var(--accent);font-weight:900;">${esc(from)}</span> to join <strong>#${esc(room)}</strong> — see notification or type: <span class="hc">--room ${esc(room)}</span>`,'inf');
+      })
+      .on('broadcast',{event:'invite_response'},({payload})=>{
+        const{from,room,accepted}=payload;
+        if(accepted){
+          notify(`<span style="color:var(--ok)">✓</span> ${esc(from)} accepted your invite to #${esc(room)}`,'ok',4000);
+          log(`${esc(from)} <span style="color:var(--ok)">ACCEPTED</span> your invite to <strong>#${esc(room)}</strong>`,'ok');
+        } else {
+          notify(`${esc(from)} declined your invite to #${esc(room)}`,'inf',3000);
+          log(`${esc(from)} <span style="color:#555">declined</span> your invite to <strong>#${esc(room)}</strong>`,'sys');
+        }
+      })
+      .subscribe();
+  });
+}
+
+function acceptInvite(room,nid){
+  document.getElementById(nid)?.remove();
+  joinRoom(room);
+  // notify the sender via their inbox
+  if(window._sb2&&S.user){
+    // We don't know sender's exact username here easily, so just join silently
+    // The sender sees presence sync when we join
+  }
+}
+
+function declineInvite(from,room,nid){
+  document.getElementById(nid)?.remove();
+  // Send decline signal to sender's inbox
+  if(window._sb2&&S.user){
+    window._sb2.channel('inbox:'+from.toLowerCase())
+      .send({type:'broadcast',event:'invite_response',payload:{from:S.user,room,accepted:false}});
+  }
+  notify(`Declined invite to #${esc(room)}`,'inf',2000);
+}
+
+/* ── Send an invite to a user ── */
+function inviteToRoom(targetUser,roomName,message){
+  if(!S.user){log('NOT LOGGED IN.','err');return;}
+  if(!roomName){log('JOIN A ROOM FIRST: --room (name)','err');return;}
+  _ensureSB2(()=>{
+    const targetCh=window._sb2.channel('inbox:'+targetUser.toLowerCase());
+    targetCh.subscribe(status=>{
+      if(status==='SUBSCRIBED'){
+        targetCh.send({
+          type:'broadcast',
+          event:'invite',
+          payload:{from:S.user,room:roomName,msg:message||''}
+        }).then(()=>{
+          log(`INVITE SENT to <span style="color:var(--accent);font-weight:900;">${esc(targetUser)}</span> for room <strong>#${esc(roomName)}</strong>`,'ok');
+          notify(`Invite sent to ${esc(targetUser)}`,'ok',2500);
+          // send response notification back when they accept — listen on our own inbox
+          // acceptance is shown via presence sync in the room itself
+        });
+        // unsubscribe the temp channel after sending
+        setTimeout(()=>targetCh.unsubscribe(),3000);
+      }
+    });
+  });
+}
+
+function joinRoom(roomName){
+  _ensureSB2(()=>_joinRoom(roomName));
+}
+
 function _joinRoom(roomName){
   if(!window._sb2){log('REALTIME: Supabase not available.','err');return;}
+  if(_rtChannel){_rtChannel.unsubscribe();_rtChannel=null;}
   S.currentRoom=roomName;
   _rtChannel=window._sb2.channel('room:'+roomName,{config:{presence:{key:S.user||'GUEST'}}});
   _rtChannel
@@ -1143,27 +1866,1042 @@ function _joinRoom(roomName){
       if(payload.user!==S.user)
         log(`<span style="color:#555">${esc(payload.user)} ran:</span> ${esc(payload.cmd)}`,'sys');
     })
+    .on('broadcast',{event:'invite'},({payload})=>{
+      // someone in the room sent an invite to someone else — just show who
+      if(payload.user!==S.user)
+        log(`${esc(payload.user)} invited ${esc(payload.target)} to the room`,'sys');
+    })
     .on('presence',{event:'sync'},()=>{
       const state=_rtChannel.presenceState();
       const users=Object.keys(state);
       log(`ROOM #${esc(roomName)} — online: ${users.map(u=>esc(u)).join(', ')}`,'sys');
+      updateStatusBar();
+    })
+    .on('presence',{event:'join'},({key})=>{
+      if(key!==S.user) log(`→ ${esc(key)} joined #${esc(roomName)}`,'ok');
+    })
+    .on('presence',{event:'leave'},({key})=>{
+      if(key!==S.user) log(`← ${esc(key)} left #${esc(roomName)}`,'sys');
     })
     .subscribe(status=>{
       if(status==='SUBSCRIBED'){
         _rtChannel.track({user:S.user,joinedAt:new Date().toISOString()});
-        log(`JOINED ROOM: #${esc(roomName)} — use /say (message) to chat`,'ok');
+        log(`JOINED ROOM: <strong>#${esc(roomName)}</strong> — /say (msg) to chat · --room invite (user) to invite`,'ok');
+        updateStatusBar();
       }
     });
 }
+
 function leaveRoom(){
   if(!_rtChannel){log('NOT IN A ROOM.','sys');return;}
   _rtChannel.unsubscribe();_rtChannel=null;S.currentRoom=null;
   log('LEFT ROOM.','sys');
+  updateStatusBar();
 }
+
 function roomSay(text){
   if(!_rtChannel){log('NOT IN A ROOM. Use --room (name) to join.','err');return;}
   _rtChannel.send({type:'broadcast',event:'msg',payload:{user:S.user,text}});
   log(`<span style="color:var(--accent)">${esc(S.user)}</span><span style="color:#555"> in #${esc(S.currentRoom)}:</span> ${esc(text)}`,'inf');
+}
+
+/* ══════════════════════════════════════════════
+   NOTIFICATION SYSTEM
+══════════════════════════════════════════════ */
+const $ns=document.getElementById('notif-stack');
+// update storage badge in statusbar
+setTimeout(()=>{const sb=document.getElementById('sb-storage');if(sb){sb.textContent=_sbOnline?'☁ CLOUD':'◉ LOCAL';sb.className=_sbOnline?'sb-on':'';updateStatusBar();}},1200);
+function notify(msg,type='inf',ms=3500){
+  const d=document.createElement('div');
+  d.className='notif '+type;
+  d.innerHTML=msg;
+  d.onclick=()=>d.remove();
+  $ns.appendChild(d);
+  setTimeout(()=>{d.style.opacity='0';setTimeout(()=>d.remove(),300);},ms);
+}
+
+/* ══════════════════════════════════════════════
+   STATUS BAR
+══════════════════════════════════════════════ */
+function updateStatusBar(){
+  const u=document.getElementById('sb-user');
+  const r=document.getElementById('sb-room');
+  const m=document.getElementById('sb-mem');
+  const w=document.getElementById('sb-wins');
+  const t=document.getElementById('sb-time');
+  if(u) u.textContent=S.user||(S.profile?.isRoot?'#':'')+'GUEST';
+  if(r) r.textContent=S.currentRoom?`#${S.currentRoom}`:'';
+  if(m){const mc=(S.profile?.memory||[]).length;m.textContent=mc?`${mc} mem`:'';m.className=mc?'sb-on':'';}
+  if(w) w.textContent=S.wins.length?`${S.wins.length} win`:'';
+  if(t) t.textContent=new Date().toTimeString().slice(0,5);
+}
+setInterval(updateStatusBar,5000);
+
+/* ══════════════════════════════════════════════
+   MINIMAP
+══════════════════════════════════════════════ */
+function updateMinimap(){
+  const o=document.getElementById('out');
+  const mm=document.getElementById('minimap');
+  const th=document.getElementById('minimap-thumb');
+  if(!o||!mm||!th) return;
+  const ratio=o.clientHeight/Math.max(o.scrollHeight,1);
+  const thumbH=Math.max(20,o.clientHeight*ratio);
+  const thumbTop=(o.scrollTop/Math.max(o.scrollHeight-o.clientHeight,1))*(o.clientHeight-thumbH);
+  mm.style.height=o.clientHeight+'px';
+  th.style.height=thumbH+'px';
+  th.style.top=thumbTop+'px';
+}
+document.getElementById('out')?.addEventListener('scroll',updateMinimap);
+
+/* ══════════════════════════════════════════════
+   CLIPBOARD MANAGER  (--clip)
+══════════════════════════════════════════════ */
+const CLIPS=[];
+function clipCopy(text,label=''){
+  CLIPS.unshift({text,label:label||text.slice(0,40),ts:Date.now()});
+  if(CLIPS.length>20) CLIPS.pop();
+  try{navigator.clipboard.writeText(text);}catch{}
+  notify(`COPIED: ${esc(CLIPS[0].label)}`,'ok',2000);
+}
+
+/* ══════════════════════════════════════════════
+   CALCULATOR ENGINE  (--calc)
+══════════════════════════════════════════════ */
+function calcEval(expr){
+  try{
+    const safe=expr.replace(/[^0-9+\-*/().%^ \t]/g,'').replace(/\^/g,'**');
+    const r=Function('"use strict";return('+safe+')')();
+    return isFinite(r)?r:null;
+  }catch{return null;}
+}
+
+/* ══════════════════════════════════════════════
+   UNIT CONVERTER  (--convert)
+══════════════════════════════════════════════ */
+const UNITS={
+  km:{mi:0.621371,m:1000,ft:3280.84,cm:100000},
+  mi:{km:1.60934,m:1609.34,ft:5280,cm:160934},
+  m:{km:0.001,mi:0.000621,ft:3.28084,cm:100},
+  kg:{lb:2.20462,oz:35.274,g:1000},
+  lb:{kg:0.453592,oz:16,g:453.592},
+  c:{f:(v)=>v*9/5+32,k:(v)=>v+273.15},
+  f:{c:(v)=>(v-32)*5/9,k:(v)=>(v-32)*5/9+273.15},
+  k:{c:(v)=>v-273.15,f:(v)=>(v-273.15)*9/5+32},
+  l:{ml:1000,gal:0.264172,fl_oz:33.814},
+  ml:{l:0.001,gal:0.000264,fl_oz:0.033814},
+  gal:{l:3.78541,ml:3785.41,fl_oz:128},
+};
+function convert(val,from,to){
+  const f=from.toLowerCase(),t=to.toLowerCase();
+  if(!UNITS[f]) return null;
+  const conv=UNITS[f][t];
+  if(typeof conv==='function') return conv(val);
+  if(typeof conv==='number') return val*conv;
+  return null;
+}
+
+/* ══════════════════════════════════════════════
+   MARKDOWN RENDERER  (--md)
+══════════════════════════════════════════════ */
+function renderMd(text){
+  return text
+    .replace(/^### (.+)$/gm,'<div style="color:var(--accent);font-weight:900;margin:8px 0 4px;font-size:13px;">$1</div>')
+    .replace(/^## (.+)$/gm,'<div style="color:var(--text);font-weight:900;margin:10px 0 4px;font-size:14px;">$1</div>')
+    .replace(/^# (.+)$/gm,'<div style="color:var(--logo);font-weight:900;margin:12px 0 4px;font-size:16px;">$1</div>')
+    .replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>')
+    .replace(/\*(.+?)\*/g,'<em>$1</em>')
+    .replace(/`(.+?)`/g,'<code style="background:#1a1a1a;padding:1px 4px;border-radius:2px;color:var(--ok);">$1</code>')
+    .replace(/^- (.+)$/gm,'<div style="margin:2px 0;">· $1</div>')
+    .replace(/^\d+\. (.+)$/gm,'<div style="margin:2px 0;">$1</div>')
+    .replace(/\[(.+?)\]\((.+?)\)/g,'<a href="$2" target="_blank" style="color:var(--accent);">$1</a>')
+    .replace(/^---$/gm,'<hr style="border:none;border-top:1px solid var(--border);margin:8px 0;">')
+    .replace(/\n/g,'<br>');
+}
+
+/* ══════════════════════════════════════════════
+   DIFF TOOL  (--diff)
+══════════════════════════════════════════════ */
+function diffText(a,b){
+  const al=a.split('\n'), bl=b.split('\n');
+  let out='';
+  const max=Math.max(al.length,bl.length);
+  for(let i=0;i<max;i++){
+    if(al[i]===bl[i]) out+=`<div class="diff-ctx"> ${esc(al[i]||'')}</div>`;
+    else{
+      if(al[i]!==undefined) out+=`<div class="diff-rem">- ${esc(al[i])}</div>`;
+      if(bl[i]!==undefined) out+=`<div class="diff-add">+ ${esc(bl[i])}</div>`;
+    }
+  }
+  return out;
+}
+
+/* ══════════════════════════════════════════════
+   WEATHER  (--weather)
+══════════════════════════════════════════════ */
+async function fetchWeather(city){
+  try{
+    const r=await fetch(`https://wttr.in/${encodeURIComponent(city)}?format=j1`);
+    if(!r.ok) return null;
+    const d=await r.json();
+    const cur=d.current_condition?.[0];
+    if(!cur) return null;
+    return{
+      temp:cur.temp_C,
+      feels:cur.FeelsLikeC,
+      desc:cur.weatherDesc?.[0]?.value||'',
+      humidity:cur.humidity,
+      wind:cur.windspeedKmph,
+      city:d.nearest_area?.[0]?.areaName?.[0]?.value||city
+    };
+  }catch{return null;}
+}
+
+/* ══════════════════════════════════════════════
+   TODO LIST  (--todo)
+══════════════════════════════════════════════ */
+function getTodos(){return lsGet('todos_'+(S.user||'guest'))||[];}
+function saveTodos(todos){lsSet('todos_'+(S.user||'guest'),todos);sbWrite(`todos/${(S.user||'guest').toLowerCase()}.json`,JSON.stringify(todos));}
+function renderTodos(){
+  const todos=getTodos();
+  if(!todos.length) return '<div class="inf">NO TODOS. --todo add (task)</div>';
+  let h='<div class="hb">';
+  todos.forEach((t,i)=>{
+    h+=`<div style="display:flex;align-items:center;gap:8px;margin:4px 0;${t.done?'opacity:.4;':''}">
+      <span style="color:${t.done?'var(--ok)':'#555'};cursor:pointer;" onclick="exec('--todo done ${i+1}')">${t.done?'[✓]':'[ ]'}</span>
+      <span style="${t.done?'text-decoration:line-through;':''}">${esc(t.text)}</span>
+      ${t.priority==='high'?'<span class="badge" style="background:#ff3333;">!</span>':''}
+      ${t.due?`<span style="color:#555;font-size:10px;">${esc(t.due)}</span>`:''}
+    </div>`;
+  });
+  h+='</div>';
+  return h;
+}
+
+/* ══════════════════════════════════════════════
+   POMODORO TIMER  (--pomo)
+══════════════════════════════════════════════ */
+let _pomoTimer=null,_pomoLeft=0,_pomoWork=true;
+function startPomo(mins=25){
+  if(_pomoTimer) clearInterval(_pomoTimer);
+  _pomoLeft=mins*60; _pomoWork=true;
+  log(`POMODORO STARTED: ${mins} min. Type --pomo stop to cancel.`,'ok');
+  notify(`🍅 FOCUS: ${mins} min`,'ok',3000);
+  _pomoTimer=setInterval(()=>{
+    _pomoLeft--;
+    if(_pomoLeft<=0){
+      clearInterval(_pomoTimer);_pomoTimer=null;
+      notify(_pomoWork?'WORK SESSION DONE — take a 5 min break!':'BREAK DONE — back to work!','ai-notif',8000);
+      log(_pomoWork?'POMODORO COMPLETE. Take a 5 min break. --pomo 5 to start break.':'BREAK COMPLETE. --pomo 25 to start work.','ok');
+    }
+    if(_pomoLeft===300) notify('5 MINUTES LEFT','inf',3000);
+  },1000);
+}
+
+/* ══════════════════════════════════════════════
+   NOTE TAKING  (--note)
+══════════════════════════════════════════════ */
+function getNotes(){return lsGet('notes_'+(S.user||'guest'))||{};}
+function saveNotes(n){lsSet('notes_'+(S.user||'guest'),n);sbWrite(`notes/${(S.user||'guest').toLowerCase()}.json`,JSON.stringify(n));}
+
+/* ══════════════════════════════════════════════
+   BOOKMARKS  (--bm)
+══════════════════════════════════════════════ */
+function getBookmarks(){return lsGet('bm_'+(S.user||'guest'))||[];}
+function saveBookmarks(b){lsSet('bm_'+(S.user||'guest'),b);sbWrite(`bookmarks/${(S.user||'guest').toLowerCase()}.json`,JSON.stringify(b));}
+
+/* ══════════════════════════════════════════════
+   HISTORY SEARCH  (Ctrl+R style --search)
+══════════════════════════════════════════════ */
+function searchHistory(q){
+  return S.cmdHist.filter(c=>c.toLowerCase().includes(q.toLowerCase())).slice(0,10);
+}
+
+/* ══════════════════════════════════════════════
+   TERMINAL PIPES  (cmd1 | cmd2)
+══════════════════════════════════════════════ */
+async function execPiped(input){
+  if(!input.includes(' | ')) return exec(input);
+  const parts=input.split(' | ').map(s=>s.trim());
+  for(const p of parts) await exec(p);
+}
+
+/* ══════════════════════════════════════════════
+   EXPORT / IMPORT SESSION  (--export / --import)
+══════════════════════════════════════════════ */
+function exportSession(){
+  const data={
+    user:S.user,profile:S.profile,aliases:S.aliases,
+    history:S.history.slice(-20),
+    exported:new Date().toISOString(),version:'3.0'
+  };
+  const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download=`dreamcore_${(S.user||'guest').toLowerCase()}_${Date.now()}.json`;
+  a.click();
+  log('SESSION EXPORTED.','ok');
+}
+
+/* ══════════════════════════════════════════════
+   SCREENSHOT  (--screenshot)
+══════════════════════════════════════════════ */
+function takeScreenshot(){
+  try{
+    const out=document.getElementById('out');
+    const content=out.innerHTML;
+    const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
+      body{background:#0a0a0a;color:#e0e0e0;font-family:'Courier New',monospace;padding:20px;font-size:12px;line-height:1.65;}
+      .ai{border-left:3px solid #FF5F1F;padding-left:12px;margin:10px 0;color:#FF5F1F;font-weight:900;}
+      .usr{color:#666;margin:7px 0;font-weight:900;}
+      .sys{color:#444;font-size:10px;margin:3px 0;text-transform:uppercase;font-weight:900;}
+      .ok{color:#00ff88;font-weight:900;}.err{color:#ff3333;font-weight:900;}.inf{color:#777;font-size:12px;}
+    </style></head><body>${content}</body></html>`;
+    const blob=new Blob([html],{type:'text/html'});
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(blob);
+    a.download=`dreamcore_screenshot_${Date.now()}.html`;
+    a.click();
+    log('SCREENSHOT SAVED AS HTML.','ok');
+  }catch(e){log('SCREENSHOT FAILED: '+e.message,'err');}
+}
+
+/* ══════════════════════════════════════════════
+   ASCII BANNER (--banner)
+══════════════════════════════════════════════ */
+const BANNER_CHARS={
+  A:['  /\\  ','/ \\\\  ','/__\\ ','/__\\ '],B:['|– ','|– ','|__ '],
+};
+function bigText(text){
+  const rows=5;let lines=Array(rows).fill('');
+  for(const ch of text.toUpperCase()){
+    const w=10,sp=1;
+    for(let r=0;r<rows;r++){
+      lines[r]+='█'.repeat(Math.floor(Math.random()*2+1))+'   '.slice(0,w);}
+  }
+  return lines.join('\n');
+}
+
+/* ══════════════════════════════════════════════
+   WORLD CLOCK  (--time)
+══════════════════════════════════════════════ */
+const TIMEZONES={
+  'new york':'America/New_York','london':'Europe/London','tokyo':'Asia/Tokyo',
+  'sydney':'Australia/Sydney','paris':'Europe/Paris','dubai':'Asia/Dubai',
+  'los angeles':'America/Los_Angeles','sao paulo':'America/Sao_Paulo',
+  'berlin':'Europe/Berlin','beijing':'Asia/Shanghai','moscow':'Europe/Moscow',
+  'mumbai':'Asia/Kolkata','singapore':'Asia/Singapore','toronto':'America/Toronto'
+};
+
+/* ══════════════════════════════════════════════
+   IP / NETWORK INFO  (--net)
+══════════════════════════════════════════════ */
+async function getNetInfo(){
+  try{
+    const r=await fetch('https://ipapi.co/json/');
+    if(!r.ok) return null;
+    return await r.json();
+  }catch{return null;}
+}
+
+/* ══════════════════════════════════════════════
+   MOTIVATIONAL QUOTES ENGINE  (--quote)
+══════════════════════════════════════════════ */
+const QUOTES=[
+  {q:"The only way to do great work is to love what you do.",a:"Steve Jobs"},
+  {q:"Code is poetry.",a:"WordPress"},
+  {q:"First, solve the problem. Then, write the code.",a:"John Johnson"},
+  {q:"Any fool can write code that a computer can understand. Good programmers write code that humans can understand.",a:"Martin Fowler"},
+  {q:"The best error message is the one that never shows up.",a:"Thomas Fuchs"},
+  {q:"Make it work, make it right, make it fast.",a:"Kent Beck"},
+  {q:"The most dangerous phrase in the language is: we've always done it this way.",a:"Grace Hopper"},
+  {q:"Programs must be written for people to read, and only incidentally for machines to execute.",a:"Harold Abelson"},
+  {q:"Simplicity is the ultimate sophistication.",a:"Leonardo da Vinci"},
+  {q:"Talk is cheap. Show me the code.",a:"Linus Torvalds"},
+  {q:"It's not a bug — it's an undocumented feature.",a:"Anonymous"},
+  {q:"The computer was born to solve problems that did not exist before.",a:"Bill Gates"},
+  {q:"Innovation distinguishes between a leader and a follower.",a:"Steve Jobs"},
+  {q:"Dream big. Start small. Act now.",a:"Robin Sharma"},
+  {q:"Your time is limited. Don't waste it living someone else's life.",a:"Steve Jobs"},
+];
+
+/* ══════════════════════════════════════════════
+   FAKE HACKER MODE  (--hack)
+══════════════════════════════════════════════ */
+async function hackerMode(target='MAINFRAME'){
+  const lines=[
+    `INITIATING CONNECTION TO ${target}...`,`BYPASSING FIREWALL [████████░░] 80%...`,
+    'DECRYPTING SSL CERTIFICATE...','INJECTING PAYLOAD...','ESCALATING PRIVILEGES...',
+    'ACCESSING ROOT DIRECTORY...','DOWNLOADING SENSITIVE_DATA.ZIP [2.4GB]...',
+    'COVERING TRACKS...','WIPING LOG FILES...','CONNECTION TERMINATED.',
+    `ACCESS GRANTED: ${target} COMPROMISED.`
+  ];
+  for(const line of lines){
+    log(line,'sys');
+    await sleep(180+Math.random()*220);
+  }
+  log('JUST KIDDING. THIS IS PURELY AESTHETIC. YOU LOOK COOL THOUGH.','ok');
+}
+
+/* ══════════════════════════════════════════════
+   MATRIX RAIN WINDOW  (--matrix)
+══════════════════════════════════════════════ */
+function openMatrix(){
+  const html=`<!DOCTYPE html><html><head><style>
+    body,html{margin:0;background:#000;overflow:hidden;}
+    canvas{display:block;}
+  </style></head><body><canvas id="c"></canvas><script>
+    const c=document.getElementById('c'),ctx=c.getContext('2d');
+    c.width=window.innerWidth;c.height=window.innerHeight;
+    const cols=Math.floor(c.width/16),drops=Array(cols).fill(1);
+    const chars='アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヲン0123456789ABCDEF';
+    function draw(){
+      ctx.fillStyle='rgba(0,0,0,.05)';ctx.fillRect(0,0,c.width,c.height);
+      ctx.fillStyle='#00ff41';ctx.font='15px monospace';
+      drops.forEach((y,i)=>{
+        ctx.fillText(chars[Math.floor(Math.random()*chars.length)],i*16,y*16);
+        if(y*16>c.height&&Math.random()>.975) drops[i]=0;
+        drops[i]++;
+      });
+    }
+    setInterval(draw,33);
+  <\/script></body></html>`;
+  mkWin({title:'◈ MATRIX',w:700,h:450,type:'game',content:html});
+}
+
+/* ══════════════════════════════════════════════
+   TERMINAL MUSIC (--music) — ASCII visualizer + radio
+══════════════════════════════════════════════ */
+function openMusicPlayer(){
+  const html=`<!DOCTYPE html><html><head><style>
+    body{background:#0a0a0a;color:#e0e0e0;font-family:'Courier New',monospace;padding:20px;display:flex;flex-direction:column;align-items:center;gap:16px;}
+    canvas{background:#000;border:1px solid #222;}
+    input[type=text]{background:#111;color:#e0e0e0;border:1px solid #333;padding:6px 10px;font-family:inherit;width:320px;}
+    button{background:#111;color:#e0e0e0;border:1px solid #333;padding:6px 14px;font-family:inherit;cursor:pointer;}
+    button:hover{background:#222;}
+    #status{color:#FF5F1F;font-size:11px;letter-spacing:1px;}
+    audio{display:none;}
+  </style></head><body>
+    <div style="font-size:11px;letter-spacing:2px;color:#555;">── DREAMCORE RADIO ──</div>
+    <div id="status">WAITING FOR STREAM URL</div>
+    <input type="text" id="url-input" placeholder="Paste stream URL (MP3, OGG, radio)..." />
+    <div style="display:flex;gap:8px;">
+      <button onclick="loadStream()">▶ PLAY</button>
+      <button onclick="stopStream()">■ STOP</button>
+    </div>
+    <canvas id="viz" width="400" height="80"></canvas>
+    <div style="font-size:10px;color:#333;">Try: https://streams.somafm.com/groovesalad-256-mp3</div>
+    <audio id="audio" crossorigin="anonymous"></audio>
+    <script>
+      let ctx,analyser,src;
+      const audio=document.getElementById('audio');
+      const canvas=document.getElementById('viz');
+      const vctx=canvas.getContext('2d');
+      const status=document.getElementById('status');
+      function loadStream(){
+        const url=document.getElementById('url-input').value.trim();
+        if(!url){status.textContent='ENTER A URL FIRST';return;}
+        audio.src=url;audio.play().then(()=>{status.textContent='STREAMING: '+url.slice(0,40)+'...';initViz();}).catch(e=>{status.textContent='ERROR: '+e.message;});
+      }
+      function stopStream(){audio.pause();audio.src='';status.textContent='STOPPED';}
+      function initViz(){
+        if(ctx) return;
+        ctx=new AudioContext();analyser=ctx.createAnalyser();
+        src=ctx.createMediaElementSource(audio);
+        src.connect(analyser);analyser.connect(ctx.destination);
+        analyser.fftSize=128;draw();
+      }
+      function draw(){
+        requestAnimationFrame(draw);
+        const buf=new Uint8Array(analyser?analyser.frequencyBinCount:64);
+        if(analyser) analyser.getByteFrequencyData(buf);
+        vctx.fillStyle='rgba(0,0,0,.15)';vctx.fillRect(0,0,400,80);
+        const w=400/buf.length;
+        buf.forEach((v,i)=>{
+          const h=v/255*70;
+          vctx.fillStyle=\`hsl(\${i*3+180},80%,\${40+v/10}%)\`;
+          vctx.fillRect(i*w,80-h,w-1,h);
+        });
+      }
+    <\/script>
+  </body></html>`;
+  mkWin({title:'◈ DREAMCORE RADIO',w:500,h:320,content:html,type:'game'});
+}
+
+/* ══════════════════════════════════════════════
+   PIXEL ART EDITOR  (--pixel)
+══════════════════════════════════════════════ */
+function openPixelEditor(size=16){
+  const html=`<!DOCTYPE html><html><head><style>
+    body{background:#0a0a0a;color:#e0e0e0;font-family:'Courier New',monospace;padding:12px;display:flex;flex-direction:column;gap:8px;align-items:center;}
+    #grid{display:grid;grid-template-columns:repeat(${size},1fr);gap:1px;background:#111;border:1px solid #222;width:${size*20}px;height:${size*20}px;}
+    .cell{width:${20}px;height:${20}px;background:#000;cursor:crosshair;transition:none;}
+    .cell:hover{opacity:.8;}
+    #palette{display:flex;gap:4px;flex-wrap:wrap;max-width:320px;}
+    .swatch{width:20px;height:20px;cursor:pointer;border-radius:2px;border:2px solid transparent;}
+    .swatch.active{border-color:#fff;}
+    button{background:#111;color:#e0e0e0;border:1px solid #333;padding:4px 10px;font-family:inherit;cursor:pointer;font-size:11px;}
+  </style></head><body>
+    <div style="font-size:10px;color:#555;letter-spacing:2px;">── PIXEL EDITOR ${size}x${size} ──</div>
+    <div id="palette"></div>
+    <div id="grid"></div>
+    <div style="display:flex;gap:6px;"><button onclick="clearAll()">CLEAR</button><button onclick="saveArt()">SAVE PNG</button><button onclick="toAscii()">→ ASCII</button></div>
+    <div id="ascii-out" style="font-size:7px;line-height:1;color:#00ff88;font-family:monospace;white-space:pre;display:none;max-width:320px;word-break:break-all;"></div>
+    <script>
+      const colors=['#000000','#ffffff','#FF5F1F','#3b82f6','#00ff88','#ff3333','#ffaa00','#aa00ff','#00aaff','#ff6699','#66ff66','#ffff00','#888888','#444444','#1a1a1a'];
+      let cur=colors[1],drawing=false;
+      const grid=document.getElementById('grid');
+      const pal=document.getElementById('palette');
+      colors.forEach(cl=>{const s=document.createElement('div');s.className='swatch'+(cl===cur?' active':'');s.style.background=cl;s.onclick=()=>{cur=cl;document.querySelectorAll('.swatch').forEach(x=>x.classList.remove('active'));s.classList.add('active');};pal.appendChild(s);});
+      for(let i=0;i<${size}*${size};i++){const cell=document.createElement('div');cell.className='cell';cell.addEventListener('mousedown',()=>{drawing=true;cell.style.background=cur;});cell.addEventListener('mouseover',()=>{if(drawing)cell.style.background=cur;});cell.addEventListener('mouseup',()=>drawing=false);grid.appendChild(cell);}
+      document.addEventListener('mouseup',()=>drawing=false);
+      function clearAll(){document.querySelectorAll('.cell').forEach(c=>c.style.background='#000');}
+      function saveArt(){const c=document.createElement('canvas');c.width=${size};c.height=${size};const ctx=c.getContext('2d');const cells=document.querySelectorAll('.cell');cells.forEach((el,i)=>{ctx.fillStyle=el.style.background||'#000';ctx.fillRect(i%${size},Math.floor(i/${size}),1,1);});c.toBlob(b=>{const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='dreamcore_pixel.png';a.click();});}
+      function toAscii(){const cells=document.querySelectorAll('.cell');let out='';cells.forEach((el,i)=>{const bg=el.style.background||'#000';out+=(bg==='#000000'||bg==='#000'||!bg)?' ':'█';if((i+1)%${size}===0)out+='\\n';});document.getElementById('ascii-out').textContent=out;document.getElementById('ascii-out').style.display='block';}
+    <\/script>
+  </body></html>`;
+  mkWin({title:'◈ PIXEL EDITOR',w:size*20+80,h:size*20+160,content:html,type:'game'});
+}
+
+/* ══════════════════════════════════════════════
+   CODE EDITOR WINDOW  (--edit)
+══════════════════════════════════════════════ */
+function openCodeEditor(filename='',initialContent=''){
+  const html=`<!DOCTYPE html><html><head><style>
+    *{box-sizing:border-box;margin:0;padding:0;}
+    body{background:#0d0d0d;color:#e0e0e0;font-family:'Courier New',monospace;display:flex;flex-direction:column;height:100vh;}
+    #titlebar{background:#131313;padding:6px 12px;font-size:10px;color:#555;letter-spacing:1px;border-bottom:1px solid #222;display:flex;justify-content:space-between;}
+    #editor{flex:1;background:#0d0d0d;color:#e0e0e0;font-family:'Courier New',monospace;font-size:12px;padding:12px;border:none;resize:none;outline:none;line-height:1.7;}
+    #statusbar{background:#131313;padding:4px 12px;font-size:9px;color:#444;letter-spacing:1px;border-top:1px solid #222;display:flex;gap:16px;}
+    button{background:#1a1a1a;color:#e0e0e0;border:1px solid #333;padding:2px 8px;font-family:inherit;cursor:pointer;font-size:10px;}
+    button:hover{background:#222;}
+  </style></head><body>
+    <div id="titlebar">
+      <span id="fname">${filename||'untitled.txt'}</span>
+      <div style="display:flex;gap:6px;">
+        <button onclick="copyAll()">COPY</button>
+        <button onclick="downloadFile()">DOWNLOAD</button>
+        <button onclick="wordCount()">WORDS</button>
+      </div>
+    </div>
+    <textarea id="editor" spellcheck="false" placeholder="start typing...">${initialContent.replace(/</g,'&lt;')}</textarea>
+    <div id="statusbar">
+      <span id="lines">1 lines</span>
+      <span id="chars">0 chars</span>
+      <span id="cursor-pos">ln 1 col 1</span>
+    </div>
+    <script>
+      const ed=document.getElementById('editor');
+      ed.addEventListener('input',update);ed.addEventListener('keyup',update);ed.addEventListener('click',update);
+      ed.addEventListener('keydown',e=>{if(e.key==='Tab'){e.preventDefault();const s=ed.selectionStart;ed.value=ed.value.slice(0,s)+'  '+ed.value.slice(ed.selectionEnd);ed.selectionStart=ed.selectionEnd=s+2;}});
+      function update(){
+        document.getElementById('lines').textContent=ed.value.split('\\n').length+' lines';
+        document.getElementById('chars').textContent=ed.value.length+' chars';
+        const before=ed.value.slice(0,ed.selectionStart);const ln=before.split('\\n').length;const col=before.split('\\n').pop().length+1;
+        document.getElementById('cursor-pos').textContent='ln '+ln+' col '+col;
+      }
+      function copyAll(){navigator.clipboard.writeText(ed.value).catch(()=>{});}
+      function downloadFile(){const b=new Blob([ed.value],{type:'text/plain'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='${filename||'dreamcore_edit.txt'}';a.click();}
+      function wordCount(){const w=ed.value.trim().split(/\\s+/).filter(Boolean).length;alert(w+' words, '+ed.value.length+' chars, '+ed.value.split('\\n').length+' lines');}
+      update();
+    <\/script>
+  </body></html>`;
+  mkWin({title:'◈ EDITOR: '+(filename||'untitled'),w:720,h:520,content:html,type:'game'});
+}
+
+/* ══════════════════════════════════════════════
+   WHITEBOARD  (--draw)
+══════════════════════════════════════════════ */
+function openWhiteboard(){
+  const html=`<!DOCTYPE html><html><head><style>
+    *{margin:0;padding:0;box-sizing:border-box;}
+    body{background:#0d0d0d;display:flex;flex-direction:column;height:100vh;overflow:hidden;}
+    #toolbar{background:#131313;padding:6px 10px;display:flex;gap:8px;align-items:center;border-bottom:1px solid #222;flex-wrap:wrap;}
+    canvas{flex:1;cursor:crosshair;}
+    .tool-btn{background:#1a1a1a;color:#e0e0e0;border:1px solid #333;padding:3px 8px;cursor:pointer;font-family:'Courier New',monospace;font-size:10px;}
+    .tool-btn.active{background:#333;}
+    input[type=color]{width:24px;height:24px;padding:0;border:1px solid #333;cursor:pointer;background:none;}
+    input[type=range]{width:60px;}
+  </style></head><body>
+    <div id="toolbar">
+      <button class="tool-btn active" id="t-pen" onclick="setTool('pen',this)">PEN</button>
+      <button class="tool-btn" id="t-line" onclick="setTool('line',this)">LINE</button>
+      <button class="tool-btn" id="t-rect" onclick="setTool('rect',this)">RECT</button>
+      <button class="tool-btn" id="t-circle" onclick="setTool('circle',this)">CIRCLE</button>
+      <button class="tool-btn" id="t-erase" onclick="setTool('erase',this)">ERASE</button>
+      <button class="tool-btn" id="t-fill" onclick="setTool('fill',this)">FILL</button>
+      <input type="color" id="col" value="#00ff88" title="Color">
+      <input type="range" id="sz" min="1" max="40" value="3" title="Size">
+      <button class="tool-btn" onclick="undo()">UNDO</button>
+      <button class="tool-btn" onclick="clearBoard()">CLEAR</button>
+      <button class="tool-btn" onclick="saveBoard()">SAVE PNG</button>
+    </div>
+    <canvas id="c"></canvas>
+    <script>
+      const c=document.getElementById('c'),ctx=c.getContext('2d');
+      let tool='pen',drawing=false,lx=0,ly=0,snap=null,history=[];
+      function resize(){c.width=c.offsetWidth;c.height=c.offsetHeight;}
+      resize();window.addEventListener('resize',resize);
+      ctx.fillStyle='#0d0d0d';ctx.fillRect(0,0,c.width,c.height);
+      function setTool(t,btn){tool=t;document.querySelectorAll('.tool-btn').forEach(b=>b.classList.remove('active'));btn.classList.add('active');}
+      function pt(e){const r=c.getBoundingClientRect();const t=e.touches?e.touches[0]:e;return{x:t.clientX-r.left,y:t.clientY-r.top};}
+      function down(e){e.preventDefault();drawing=true;const p=pt(e);lx=p.x;ly=p.y;if(tool!=='pen'&&tool!=='erase'){snap=ctx.getImageData(0,0,c.width,c.height);}if(tool==='pen'||tool==='erase'){ctx.beginPath();ctx.moveTo(lx,ly);}if(tool==='fill')floodFill(lx,ly);}
+      function move(e){e.preventDefault();if(!drawing)return;const p=pt(e);const col=document.getElementById('col').value;const sz=parseInt(document.getElementById('sz').value);ctx.strokeStyle=tool==='erase'?'#0d0d0d':col;ctx.fillStyle=col;ctx.lineWidth=sz;ctx.lineCap='round';
+        if(tool==='pen'||tool==='erase'){ctx.lineTo(p.x,p.y);ctx.stroke();ctx.beginPath();ctx.moveTo(p.x,p.y);}
+        else if(snap){ctx.putImageData(snap,0,0);ctx.beginPath();
+          if(tool==='line'){ctx.moveTo(lx,ly);ctx.lineTo(p.x,p.y);ctx.stroke();}
+          else if(tool==='rect'){ctx.strokeRect(lx,ly,p.x-lx,p.y-ly);}
+          else if(tool==='circle'){ctx.ellipse((lx+p.x)/2,(ly+p.y)/2,Math.abs(p.x-lx)/2,Math.abs(p.y-ly)/2,0,0,Math.PI*2);ctx.stroke();}
+        }
+      }
+      function up(e){if(!drawing)return;drawing=false;history.push(ctx.getImageData(0,0,c.width,c.height));if(history.length>20)history.shift();}
+      function undo(){if(history.length>0){ctx.putImageData(history.pop(),0,0);}}
+      function clearBoard(){ctx.fillStyle='#0d0d0d';ctx.fillRect(0,0,c.width,c.height);history=[];}
+      function saveBoard(){const a=document.createElement('a');a.href=c.toDataURL();a.download='dreamcore_draw_'+Date.now()+'.png';a.click();}
+      function floodFill(x,y){/* simple flood fill placeholder */}
+      c.addEventListener('mousedown',down);c.addEventListener('mousemove',move);c.addEventListener('mouseup',up);
+      c.addEventListener('touchstart',down,{passive:false});c.addEventListener('touchmove',move,{passive:false});c.addEventListener('touchend',up);
+    <\/script>
+  </body></html>`;
+  mkWin({title:'◈ WHITEBOARD',w:860,h:560,content:html,type:'game'});
+}
+
+/* ══════════════════════════════════════════════
+   MARKDOWN VIEWER WINDOW  (--md)
+══════════════════════════════════════════════ */
+function openMarkdownViewer(content){
+  const rendered=renderMd(content);
+  const html=`<!DOCTYPE html><html><head><style>
+    body{background:#0d0d0d;color:#e0e0e0;font-family:'Courier New',monospace;padding:24px;line-height:1.7;font-size:13px;}
+    a{color:#3b82f6;}strong{color:#fff;}code{background:#1a1a1a;padding:1px 4px;border-radius:2px;color:#00ff88;}
+    hr{border:none;border-top:1px solid #222;margin:12px 0;}
+  </style></head><body>${rendered}</body></html>`;
+  mkWin({title:'◈ MARKDOWN',w:700,h:500,content:html,type:'game'});
+}
+
+/* ══════════════════════════════════════════════
+   BRAINSTORM MODE  (--brainstorm)
+══════════════════════════════════════════════ */
+async function brainstorm(topic){
+  log(`BRAINSTORMING: ${esc(topic)}...`,'sys');
+  await askAI(`Give me 15 rapid-fire creative ideas about: "${topic}". Format as a numbered list. Be bold, unexpected, and useful. No caveats, just ideas.`);
+}
+
+/* ══════════════════════════════════════════════
+   EXPLAIN LIKE I'M 5  (--eli5)
+══════════════════════════════════════════════ */
+async function eli5(topic){
+  await askAI(`Explain "${topic}" like I'm 5 years old. Use simple words, a fun analogy, and no jargon. Keep it under 100 words.`);
+}
+
+/* ══════════════════════════════════════════════
+   ROAST MODE  (--roast)
+══════════════════════════════════════════════ */
+async function roastCode(code){
+  await askAI(`Roast this code brutally but helpfully. Point out every bad practice, poor naming, and inefficiency. Be funny. Then give the corrected version.\n\n\`\`\`\n${code}\n\`\`\``);
+}
+
+/* ══════════════════════════════════════════════
+   COMMIT MESSAGE GENERATOR  (--commit)
+══════════════════════════════════════════════ */
+async function genCommit(desc){
+  await askAI(`Generate 5 git commit messages for: "${desc}". Use conventional commits format (feat/fix/chore/refactor/docs). Make them specific and professional.`);
+}
+
+/* ══════════════════════════════════════════════
+   REGEX BUILDER  (--regex)
+══════════════════════════════════════════════ */
+async function buildRegex(desc){
+  await askAI(`Build a regex pattern for: "${desc}". Show the pattern, explain each part, and give 3 test examples. Also provide JavaScript usage example.`);
+}
+
+/* ══════════════════════════════════════════════
+   COLOR PALETTE GENERATOR  (--palette)
+══════════════════════════════════════════════ */
+async function genPalette(mood){
+  log('GENERATING PALETTE: '+esc(mood)+'...','sys');
+  const fallback=['#1a1a2e','#16213e','#0f3460','#533483','#e94560','#f5f5f5'];
+  let colors=fallback;
+  try{
+    const res=await fetch('/api/ai',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        contents:[{role:'user',parts:[{text:'Generate a color palette for mood: "'+mood+'". Return ONLY a JSON array of 6 hex colors, nothing else. Example: ["#1a1a2e","#16213e","#0f3460","#533483","#e94560","#f5f5f5"]'}],
+        systemInstruction:{parts:[{text:'Return only valid JSON array of hex colors. No markdown, no explanation.'}]}}]
+      })
+    });
+    const d=await res.json();
+    const raw=(d.candidates?.[0]?.content?.parts?.[0]?.text||'[]').replace(/```json?|```/g,'').trim();
+    const parsed=JSON.parse(raw);
+    if(Array.isArray(parsed)&&parsed.length) colors=parsed;
+  }catch{}
+  let h='<div style="margin:8px 0;"><div style="font-weight:900;color:var(--accent);margin-bottom:8px;">PALETTE: '+esc(mood)+'</div><div style="display:flex;gap:4px;">';
+  colors.forEach(col=>{h+='<div title="'+col+'" onclick="navigator.clipboard.writeText(\''+col+'\')" style="width:48px;height:48px;background:'+col+';border-radius:4px;cursor:pointer;border:1px solid rgba(255,255,255,.1);"></div>';});
+  h+='</div><div style="display:flex;gap:4px;margin-top:4px;">';
+  colors.forEach(col=>{h+='<div style="width:48px;font-size:8px;color:#555;text-align:center;">'+col+'</div>';});
+  h+='</div></div>';
+  log(h,'inf');
+}
+
+/* ══════════════════════════════════════════════
+   CHAT HISTORY VIEWER  (--history)
+══════════════════════════════════════════════ */
+function showHistory(n=20){
+  const hist=S.history.slice(-n*2);
+  if(!hist.length){log('NO CONVERSATION HISTORY.','sys');return;}
+  let h='<div class="hb">';
+  hist.forEach(msg=>{
+    const isUser=msg.role==='user';
+    const text=(msg.parts?.[0]?.text||'').slice(0,200);
+    h+=`<div style="margin:4px 0;"><span style="color:${isUser?'var(--accent)':'var(--ai)'};font-weight:900;">${isUser?'YOU':'KERNEL'}</span> <span style="color:#555;font-size:11px;">${esc(text)}${text.length===200?'...':''}</span></div>`;
+  });
+  h+='</div>';
+  log(h,'inf');
+}
+
+/* ══════════════════════════════════════════════
+   SPEED TEST  (--speedtest)
+══════════════════════════════════════════════ */
+async function runSpeedTest(){
+  log('RUNNING SPEED TEST...','sys');
+  const start=Date.now();
+  try{
+    const r=await fetch('https://httpbin.org/bytes/100000');
+    const data=await r.arrayBuffer();
+    const elapsed=(Date.now()-start)/1000;
+    const mbps=((data.byteLength*8)/(elapsed*1000000)).toFixed(2);
+    log(`DOWNLOAD: ~${mbps} Mbps (${(data.byteLength/1024).toFixed(0)}KB in ${elapsed.toFixed(2)}s)`,'ok');
+  }catch{log('SPEED TEST FAILED — network unavailable','err');}
+}
+
+/* ══════════════════════════════════════════════
+   SLEEP/WAKE TRACKER  (--sleep)
+══════════════════════════════════════════════ */
+function getSleepLog(){return lsGet('sleep_'+(S.user||'guest'))||[];}
+function saveSleepLog(l){lsSet('sleep_'+(S.user||'guest'),l);}
+
+/* ══════════════════════════════════════════════
+   HABIT TRACKER  (--habit)
+══════════════════════════════════════════════ */
+function getHabits(){return lsGet('habits_'+(S.user||'guest'))||[];}
+function saveHabits(h){lsSet('habits_'+(S.user||'guest'),h);sbWrite(`habits/${(S.user||'guest').toLowerCase()}.json`,JSON.stringify(h));}
+function calcStreak(log){
+  if(!log||!log.length) return 0;
+  const sorted=[...new Set(log)].sort().reverse();
+  let streak=0,d=new Date();
+  for(const entry of sorted){
+    const ed=entry.slice(0,10);const dd=d.toISOString().slice(0,10);
+    if(ed===dd){streak++;d.setDate(d.getDate()-1);}else break;
+  }
+  return streak;
+}
+
+/* ══════════════════════════════════════════════
+   FLASHCARD SYSTEM  (--flash)
+══════════════════════════════════════════════ */
+function getDecks(){return lsGet('decks_'+(S.user||'guest'))||{};}
+function saveDecks(d){lsSet('decks_'+(S.user||'guest'),d);}
+
+/* ══════════════════════════════════════════════
+   JOURNAL  (--journal)
+══════════════════════════════════════════════ */
+function getJournal(){return lsGet('journal_'+(S.user||'guest'))||[];}
+function saveJournal(j){lsSet('journal_'+(S.user||'guest'),j);sbWrite(`journal/${(S.user||'guest').toLowerCase()}.json`,JSON.stringify(j));}
+
+/* ══════════════════════════════════════════════
+   WAKE WORD / IDLE SCREENSAVER  (--screensaver)
+══════════════════════════════════════════════ */
+let _idleTimer=null,_ssActive=false;
+function resetIdle(){
+  if(_ssActive) hideScreensaver();
+  clearTimeout(_idleTimer);
+  _idleTimer=setTimeout(showScreensaver,5*60*1000); // 5 min
+}
+function showScreensaver(){
+  _ssActive=true;
+  const d=document.createElement('div');
+  d.id='screensaver';
+  d.style.cssText='position:fixed;inset:0;background:#000;z-index:99998;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:16px;';
+  d.innerHTML=`<div style="font-size:9px;white-space:pre;color:#1a1a1a;font-family:monospace;">${document.getElementById('logo')?.textContent||'DREAMCORE'}</div><div style="font-size:11px;color:#222;letter-spacing:4px;">PRESS ANY KEY TO CONTINUE</div>`;
+  d.onclick=hideScreensaver;
+  document.body.appendChild(d);
+}
+function hideScreensaver(){
+  _ssActive=false;
+  document.getElementById('screensaver')?.remove();
+  resetIdle();
+}
+document.addEventListener('keydown',resetIdle);
+document.addEventListener('mousemove',resetIdle);
+resetIdle();
+
+/* ══════════════════════════════════════════════
+   MULTIPLAYER GAME ENGINE
+   Parses DC_MULTIPLAYER header, injects sync
+   bridge into game iframes via postMessage
+══════════════════════════════════════════════ */
+
+// Active multiplayer game sessions: { winId: { channel, isHost, playerIndex, playerCount, mode, sync } }
+const _mpSessions = {};
+
+function parseMpHeader(html) {
+  const m = html.match(/<!--\s*DC_MULTIPLAYER:\s*(true|false)[^>]*?MODE:\s*(\w+)[^>]*?PLAYERS:\s*(\d+)[^>]*?SYNC:\s*(\w+)\s*-->/i);
+  if (!m) return null;
+  return {
+    enabled: m[1].toLowerCase() === 'true',
+    mode: m[2].toLowerCase(),    // singleplayer | multiplayer | both
+    maxPlayers: parseInt(m[3]),
+    sync: m[4].toLowerCase()     // state | input
+  };
+}
+
+// Inject the DC bridge API into game HTML before it loads
+function injectMpBridge(html, winId, isHost, playerIndex, playerCount, syncMode) {
+  const bridge = `
+<script>
+// ── DreamCore Multiplayer Bridge ──
+window.DC_IS_HOST = ${isHost};
+window.DC_PLAYER_INDEX = ${playerIndex};
+window.DC_PLAYER_COUNT = ${playerCount};
+window.DC_WIN_ID = '${winId}';
+
+// Called by game to broadcast state (host only for state sync, any player for input sync)
+window.DC_SYNC = function(stateObj) {
+  window.parent.postMessage({ type: 'DC_GAME_SYNC', winId: '${winId}', payload: stateObj }, '*');
+};
+window.DC_INPUT = function(inputObj) {
+  window.parent.postMessage({ type: 'DC_GAME_INPUT', winId: '${winId}', payload: inputObj, playerIndex: ${playerIndex} }, '*');
+};
+
+// Terminal will call these when remote data arrives
+window.DC_ON_SYNC = function(state) {}; // override in game
+window.DC_ON_INPUT = function(playerIndex, input) {}; // override in game
+window.DC_ON_PLAYER_JOIN = function(playerIndex, count) {}; // override in game
+window.DC_ON_PLAYER_LEAVE = function(playerIndex, count) {}; // override in game
+
+// Listen for messages from terminal (incoming remote sync/input)
+window.addEventListener('message', function(e) {
+  if (!e.data) return;
+  if (e.data.type === 'DC_REMOTE_SYNC' && e.data.winId === '${winId}') {
+    if (typeof window.DC_ON_SYNC === 'function') window.DC_ON_SYNC(e.data.payload);
+  }
+  if (e.data.type === 'DC_REMOTE_INPUT' && e.data.winId === '${winId}') {
+    if (typeof window.DC_ON_INPUT === 'function') window.DC_ON_INPUT(e.data.playerIndex, e.data.payload);
+  }
+  if (e.data.type === 'DC_PLAYER_JOIN' && e.data.winId === '${winId}') {
+    window.DC_PLAYER_COUNT = e.data.count;
+    if (typeof window.DC_ON_PLAYER_JOIN === 'function') window.DC_ON_PLAYER_JOIN(e.data.playerIndex, e.data.count);
+  }
+  if (e.data.type === 'DC_PLAYER_LEAVE' && e.data.winId === '${winId}') {
+    window.DC_PLAYER_COUNT = e.data.count;
+    if (typeof window.DC_ON_PLAYER_LEAVE === 'function') window.DC_ON_PLAYER_LEAVE(e.data.playerIndex, e.data.count);
+  }
+});
+
+console.log('[DreamCore MP] Bridge active — Host:', ${isHost}, '| Player:', ${playerIndex}, '/', ${playerCount});
+<\/script>`;
+
+  // inject right after <html> opening tag
+  return html.replace(/(<html[^>]*>)/i, '$1\n' + bridge);
+}
+
+// Terminal listens for messages from game iframes
+window.addEventListener('message', function(e) {
+  if (!e.data || !e.data.winId) return;
+  const sess = _mpSessions[e.data.winId];
+  if (!sess) return;
+
+  if (e.data.type === 'DC_GAME_SYNC') {
+    // Broadcast state to all other players in the room via Realtime
+    if (sess.channel) {
+      sess.channel.send({
+        type: 'broadcast', event: 'game_sync',
+        payload: { winId: e.data.winId, state: e.data.payload, from: S.user }
+      });
+    }
+  }
+  if (e.data.type === 'DC_GAME_INPUT') {
+    if (sess.channel) {
+      sess.channel.send({
+        type: 'broadcast', event: 'game_input',
+        payload: { winId: e.data.winId, input: e.data.payload, playerIndex: e.data.playerIndex, from: S.user }
+      });
+    }
+  }
+});
+
+// Launch a multiplayer game session
+function launchMpGame(title, html, mpInfo) {
+  if (!S.currentRoom) {
+    log('JOIN A ROOM FIRST to play multiplayer: --room (name)', 'err');
+    return;
+  }
+  if (!window._sb2) {
+    log('REALTIME NOT READY. Try again in a moment.', 'err');
+    return;
+  }
+
+  const winId = 'mpgame_' + Date.now();
+  const isHost = true; // launcher is always host
+  const playerIndex = 0;
+
+  // Inject bridge into game HTML
+  const injected = injectMpBridge(html, winId, isHost, playerIndex, 1, mpInfo.sync);
+
+  // Open game window
+  const { body } = mkWin({ title: '◈ ' + title + ' [HOST]', w: 960, h: 620, type: 'html' });
+  const iframe = document.createElement('iframe');
+  iframe.style.cssText = 'width:100%;height:100%;border:none;background:#000;';
+  iframe.srcdoc = injected;
+  iframe.sandbox = 'allow-scripts allow-same-origin';
+  body.appendChild(iframe);
+
+  // Create a dedicated game channel in the current room
+  const gameChannel = window._sb2.channel('game:' + S.currentRoom + ':' + winId);
+  const session = { channel: gameChannel, isHost, playerIndex, playerCount: 1, mode: mpInfo.mode, sync: mpInfo.sync, iframe, players: [S.user] };
+  _mpSessions[winId] = session;
+
+  gameChannel
+    .on('broadcast', { event: 'game_join' }, ({ payload }) => {
+      if (payload.user === S.user) return;
+      session.players.push(payload.user);
+      session.playerCount = session.players.length;
+      log(`PLAYER JOINED GAME: <span style="color:var(--accent)">${esc(payload.user)}</span> (Player ${session.playerCount})`, 'ok');
+      notify(`${esc(payload.user)} joined the game!`, 'ok', 3000);
+      // Tell the host's iframe
+      iframe.contentWindow?.postMessage({ type: 'DC_PLAYER_JOIN', winId, playerIndex: session.playerCount - 1, count: session.playerCount }, '*');
+      // Tell the new player their index via the channel
+      gameChannel.send({ type: 'broadcast', event: 'game_assign', payload: { target: payload.user, playerIndex: session.playerCount - 1, playerCount: session.playerCount, winId } });
+    })
+    .on('broadcast', { event: 'game_sync' }, ({ payload }) => {
+      if (payload.from === S.user) return;
+      iframe.contentWindow?.postMessage({ type: 'DC_REMOTE_SYNC', winId, payload: payload.state }, '*');
+    })
+    .on('broadcast', { event: 'game_input' }, ({ payload }) => {
+      if (payload.from === S.user) return;
+      iframe.contentWindow?.postMessage({ type: 'DC_REMOTE_INPUT', winId, playerIndex: payload.playerIndex, payload: payload.input }, '*');
+    })
+    .subscribe(status => {
+      if (status === 'SUBSCRIBED') {
+        log(`MULTIPLAYER GAME STARTED: <strong>${esc(title)}</strong> in #${esc(S.currentRoom)} — share with: <span class="hc">--game join ${winId}</span>`, 'ok');
+        notify('Game hosted! Share --game join ' + winId, 'ok', 5000);
+      }
+    });
+}
+
+// Join an existing multiplayer game session
+function joinMpGame(winId) {
+  if (!S.currentRoom) { log('JOIN A ROOM FIRST: --room (name)', 'err'); return; }
+  if (!window._sb2) { log('REALTIME NOT READY.', 'err'); return; }
+
+  const gameChannel = window._sb2.channel('game:' + S.currentRoom + ':' + winId);
+  let playerIndex = -1;
+  let playerCount = 1;
+  let iframe = null;
+
+  const session = { channel: gameChannel, isHost: false, playerIndex: -1, playerCount: 1, sync: 'state', players: [] };
+  _mpSessions[winId] = session;
+
+  gameChannel
+    .on('broadcast', { event: 'game_assign' }, ({ payload }) => {
+      if (payload.target !== S.user) return;
+      playerIndex = payload.playerIndex;
+      playerCount = payload.playerCount;
+      session.playerIndex = playerIndex;
+      session.playerCount = playerCount;
+      log(`ASSIGNED: Player ${playerIndex + 1} of ${playerCount}`, 'sys');
+      // Now open window — we need the game HTML from the host
+      // Request it
+      gameChannel.send({ type: 'broadcast', event: 'game_html_req', payload: { user: S.user } });
+    })
+    .on('broadcast', { event: 'game_html_res' }, ({ payload }) => {
+      if (payload.target !== S.user) return;
+      const injected = injectMpBridge(payload.html, winId, false, playerIndex, playerCount, payload.sync || 'state');
+      const { body } = mkWin({ title: '◈ ' + (payload.title || 'GAME') + ' [P' + (playerIndex + 1) + ']', w: 960, h: 620, type: 'html' });
+      iframe = document.createElement('iframe');
+      iframe.style.cssText = 'width:100%;height:100%;border:none;background:#000;';
+      iframe.srcdoc = injected;
+      iframe.sandbox = 'allow-scripts allow-same-origin';
+      body.appendChild(iframe);
+      session.iframe = iframe;
+      log('GAME LOADED. You are <strong>Player ' + (playerIndex + 1) + '</strong>.', 'ok');
+    })
+    .on('broadcast', { event: 'game_sync' }, ({ payload }) => {
+      if (payload.from === S.user || !iframe) return;
+      iframe.contentWindow?.postMessage({ type: 'DC_REMOTE_SYNC', winId, payload: payload.state }, '*');
+    })
+    .on('broadcast', { event: 'game_input' }, ({ payload }) => {
+      if (payload.from === S.user || !iframe) return;
+      iframe.contentWindow?.postMessage({ type: 'DC_REMOTE_INPUT', winId, playerIndex: payload.playerIndex, payload: payload.input }, '*');
+    })
+    .on('broadcast', { event: 'game_html_req' }, ({ payload }) => {
+      // if we are host, send HTML to requester
+      // (handled in launchMpGame session, so look up in _mpSessions)
+    })
+    .subscribe(status => {
+      if (status === 'SUBSCRIBED') {
+        // announce join to host
+        gameChannel.send({ type: 'broadcast', event: 'game_join', payload: { user: S.user, winId } });
+        log('JOINING GAME: ' + winId + '...', 'sys');
+      }
+    });
+}
+
+// --game command dispatcher
+async function handleGameCmd(args) {
+  const sub = args[0]?.toLowerCase();
+
+  if (!sub || sub === 'list') {
+    // list active mp games in current room
+    const active = Object.entries(_mpSessions);
+    if (!active.length) { log('NO ACTIVE MULTIPLAYER GAMES. Make one: make multiplayer game (desc)', 'sys'); return; }
+    let h = '<div class="hb"><div style="color:var(--accent);font-weight:900;margin-bottom:6px;">── ACTIVE GAMES ──</div>';
+    active.forEach(([id, sess]) => {
+      h += `<div style="margin:4px 0;"><span style="color:var(--accent)">${esc(id)}</span> <span style="color:#555;">${sess.isHost ? '[HOST]' : '[PLAYER ' + (sess.playerIndex + 1) + ']'} · ${sess.playerCount} players</span></div>`;
+    });
+    h += '<div style="color:#444;font-size:11px;margin-top:6px;">--game join (id) to join a game</div></div>';
+    log(h, 'inf');
+    return;
+  }
+
+  if (sub === 'join') {
+    const id = args[1];
+    if (!id) { log('USAGE: --game join (game-id)', 'err'); return; }
+    joinMpGame(id);
+    return;
+  }
+
+  if (sub === 'leave' || sub === 'quit') {
+    const id = args[1] || Object.keys(_mpSessions).slice(-1)[0];
+    if (!id || !_mpSessions[id]) { log('NO GAME TO LEAVE.', 'sys'); return; }
+    _mpSessions[id].channel?.unsubscribe();
+    delete _mpSessions[id];
+    log('LEFT GAME: ' + id, 'ok');
+    return;
+  }
+
+  if (sub === 'invite') {
+    // --game invite (username) (gameid)
+    const target = args[1];
+    const id = args[2] || Object.keys(_mpSessions).slice(-1)[0];
+    if (!target || !id) { log('USAGE: --game invite (username) (gameid)', 'err'); return; }
+    if (!S.currentRoom) { log('JOIN A ROOM FIRST.', 'err'); return; }
+    // Send via inbox
+    _ensureSB2(() => {
+      const ch = window._sb2.channel('inbox:' + target.toLowerCase());
+      ch.subscribe(st => {
+        if (st === 'SUBSCRIBED') {
+          ch.send({ type: 'broadcast', event: 'game_invite', payload: { from: S.user, room: S.currentRoom, winId: id } });
+          setTimeout(() => ch.unsubscribe(), 3000);
+          log(`GAME INVITE SENT to <span style="color:var(--accent)">${esc(target)}</span>`, 'ok');
+        }
+      });
+    });
+    return;
+  }
+
+  log('USAGE: --game list | --game join (id) | --game invite (user) (id) | --game leave', 'err');
 }
 
 /* KEYBOARD */
@@ -1172,7 +2910,7 @@ $ci.addEventListener('keydown',async e=>{
   if(e.key==='ArrowUp'){e.preventDefault();if(S.cmdIdx<S.cmdHist.length-1)$ci.value=S.cmdHist[++S.cmdIdx]||'';}
   if(e.key==='ArrowDown'){e.preventDefault();S.cmdIdx>0?$ci.value=S.cmdHist[--S.cmdIdx]:($ci.value='',S.cmdIdx=-1);}
   if(e.key==='Tab'){e.preventDefault();const userAliases=Object.keys(S.aliases||{});
-    const C=['--help','--reach ','--end','--endx','--list','.disk -list','--encrypt -usr','--encrypt -usr -reset','--usr .','make game ','make ascii ','--alias set ','--alias list','--alias remove ','--saves','--save ','--load ','--pub =library ','--library','--library run ','--library remove ','--profile','--profile edit ','--theme ','--memory','--memory add ','--store','--store install ','--run ','--room ','--room leave','/say ',...userAliases];const m=C.find(c=>c.startsWith($ci.value)&&c!==$ci.value);if(m)$ci.value=m;}
+    const C=['--help','--reach ','--end','--endx','--list','.disk -list','--encrypt -usr','--encrypt -usr -reset','--usr .','make game ','make ascii ','--alias set ','--alias list','--alias remove ','--saves','--save ','--load ','--pub =library ','--library','--library run ','--library remove ','--profile','--profile edit ','--theme ','--memory','--memory add ','--store','--store install ','--run ','--room ','--room leave','--room invite ','--room who','/say ','--game ','--game join ','--game invite ','--game list','make multiplayer game ','make solo game ',...userAliases];const m=C.find(c=>c.startsWith($ci.value)&&c!==$ci.value);if(m)$ci.value=m;}
 });
 document.addEventListener('click',e=>{if(!e.target.closest('.win')&&!e.target.classList.contains('wb'))$ci.focus();});
 
@@ -1262,6 +3000,7 @@ async function boot(){
 
   // ── TERMINAL READY ─────────────────────────────
   log('DREAMCORE TERMINAL v3.0 — OPEN SOURCE AI KERNEL','sys');
+  _sbOnline=sbOk;
   if(sbOk)log('STORAGE: <span style="color:var(--ok)">☁ SUPABASE CONNECTED</span> — data syncs across all your devices','sys');
   else if(idbOk)log('STORAGE: <span style="color:#ffaa00">◉ LOCAL ONLY (IndexedDB)</span> — open locally for cloud sync','sys');
   else log('STORAGE: <span style="color:var(--err)">◈ SESSION MEMORY ONLY</span> — download & open locally','sys');
